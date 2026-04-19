@@ -1,0 +1,15 @@
+Mic Input (C)
+   ↓
+Wake Word Detected
+   ↓
+Kotlin Event Triggered
+   ↓
+Start Speech-to-Text
+   ↓
+Text → C NLP
+   ↓
+Intent Returned
+   ↓
+Kotlin Executes Action
+   ↓
+TTS Response

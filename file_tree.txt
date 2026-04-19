@@ -1,0 +1,118 @@
+kate/
+├── .github/
+│   └── workflows/
+│       ├── android-ci.yml          # Build + test on every push
+│       └── android-release.yml     # Sign + publish APK on main
+│
+├── app/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── AndroidManifest.xml
+│   │   │   │
+│   │   │   ├── cpp/                        # 80% — Kate's brain (C)
+│   │   │   │   ├── CMakeLists.txt
+│   │   │   │   ├── kate_core.h             # Master header
+│   │   │   │   ├── bridge.c               # JNI — Kotlin ↔ C
+│   │   │   │   │
+│   │   │   │   ├── audio/
+│   │   │   │   │   ├── audio_stream.c     # AAudio hardware loop
+│   │   │   │   │   ├── audio_stream.h
+│   │   │   │   │   ├── wake_word.c        # "Hey Kate" detector
+│   │   │   │   │   ├── wake_word.h
+│   │   │   │   │   ├── vad.c              # Voice activity detection
+│   │   │   │   │   └── vad.h
+│   │   │   │   │
+│   │   │   │   ├── brain/
+│   │   │   │   │   ├── emotion_engine.c   # Emotion classifier
+│   │   │   │   │   ├── emotion_engine.h
+│   │   │   │   │   ├── stress_analyzer.c  # Lie detector / stress
+│   │   │   │   │   ├── stress_analyzer.h
+│   │   │   │   │   ├── habit_engine.c     # Learns your patterns
+│   │   │   │   │   ├── habit_engine.h
+│   │   │   │   │   ├── situation_engine.c # Fuses context signals
+│   │   │   │   │   └── situation_engine.h
+│   │   │   │   │
+│   │   │   │   ├── nlp/
+│   │   │   │   │   ├── intent_parser.c    # Understands commands
+│   │   │   │   │   ├── intent_parser.h
+│   │   │   │   │   ├── tokenizer.c        # Splits speech to tokens
+│   │   │   │   │   ├── tokenizer.h
+│   │   │   │   │   ├── style_model.c      # Auto-reply in your style
+│   │   │   │   │   └── style_model.h
+│   │   │   │   │
+│   │   │   │   └── phantom/
+│   │   │   │       ├── journal_engine.c   # Passive day logging
+│   │   │   │       └── journal_engine.h
+│   │   │   │
+│   │   │   ├── kotlin/
+│   │   │   │   └── com/kate/assistant/
+│   │   │   │       │
+│   │   │   │       ├── KateApp.kt              # Hilt app entry point
+│   │   │   │       │
+│   │   │   │       ├── core/
+│   │   │   │       │   ├── di/
+│   │   │   │       │   │   ├── AppModule.kt
+│   │   │   │       │   │   └── ServiceModule.kt
+│   │   │   │       │   ├── permissions/
+│   │   │   │       │   │   └── PermissionManager.kt
+│   │   │   │       │   └── utils/
+│   │   │   │       │       └── Extensions.kt
+│   │   │   │       │
+│   │   │   │       ├── bridge/
+│   │   │   │       │   ├── KateBridge.kt       # JNI interface
+│   │   │   │       │   └── KateEvent.kt        # Event data classes
+│   │   │   │       │
+│   │   │   │       ├── services/
+│   │   │   │       │   ├── KateService.kt      # Master foreground service
+│   │   │   │       │   └── KateAccessibilityService.kt
+│   │   │   │       │
+│   │   │   │       ├── features/
+│   │   │   │       │   ├── voice/
+│   │   │   │       │   │   ├── KateSpeechManager.kt
+│   │   │   │       │   │   └── KateTTS.kt
+│   │   │   │       │   ├── device/
+│   │   │   │       │   │   ├── KateHardwareController.kt
+│   │   │   │       │   │   └── KateDeviceController.kt
+│   │   │   │       │   ├── launcher/
+│   │   │   │       │   │   └── KateAppLauncher.kt
+│   │   │   │       │   ├── tasks/
+│   │   │   │       │   │   ├── TaskRepository.kt
+│   │   │   │       │   │   └── ReminderScheduler.kt
+│   │   │   │       │   └── phantom/
+│   │   │   │       │       └── PhantomJournal.kt
+│   │   │   │       │
+│   │   │   │       ├── data/
+│   │   │   │       │   ├── db/
+│   │   │   │       │   │   ├── KateDatabase.kt
+│   │   │   │       │   │   ├── TaskDao.kt
+│   │   │   │       │   │   └── JournalDao.kt
+│   │   │   │       │   └── preferences/
+│   │   │   │       │       └── KatePreferences.kt
+│   │   │   │       │
+│   │   │   │       └── ui/
+│   │   │   │           ├── MainActivity.kt
+│   │   │   │           ├── theme/
+│   │   │   │           │   ├── Theme.kt
+│   │   │   │           │   └── Color.kt
+│   │   │   │           └── screens/
+│   │   │   │               ├── HomeScreen.kt
+│   │   │   │               └── SettingsScreen.kt
+│   │   │   │
+│   │   │   └── res/
+│   │   │       ├── drawable/
+│   │   │       │   └── ic_kate.xml
+│   │   │       └── values/
+│   │   │           ├── strings.xml
+│   │   │           └── colors.xml
+│   │   │
+│   │   └── test/
+│   │       └── com/kate/assistant/
+│   │           └── KateBridgeTest.kt
+│   │
+│   └── build.gradle.kts
+│
+├── gradle/
+│   └── libs.versions.toml          # Version catalog
+├── build.gradle.kts
+├── settings.gradle.kts
+└── README.md
