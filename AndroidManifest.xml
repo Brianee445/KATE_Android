@@ -1,0 +1,63 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.kate.assistant">
+
+    <!-- ================= PERMISSIONS ================= -->
+
+    <!-- Microphone -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- Foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+
+    <!-- Keep running -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <!-- Optional (for future expansion) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- ================= APPLICATION ================= -->
+
+    <application
+        android:name=".KateApp"
+        android:allowBackup="true"
+        android:label="Kate"
+        android:theme="@style/Theme.Kate"
+        android:usesCleartextTraffic="true">
+
+        <!-- ================= MAIN ACTIVITY ================= -->
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- ================= FOREGROUND SERVICE ================= -->
+
+        <service
+            android:name=".services.KateService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <!-- ================= ACCESSIBILITY SERVICE ================= -->
+
+        <service
+            android:name=".services.KateAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config"/>
+        </service>
+
+    </application>
+
+</manifest>
