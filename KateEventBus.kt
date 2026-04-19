@@ -1,0 +1,15 @@
+package com.kate.assistant.bridge
+
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+
+object KateEventBus {
+    private val _events = MutableSharedFlow<KateEvent>(extraBufferCapacity = 64)
+    private val scope   = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    fun emit(event: KateEvent) { _events.tryEmit(event) }
+
+    fun subscribe(handler: (KateEvent) -> Unit) {
+        scope.launch { _events.collect { handler(it) } }
+    }
+}
