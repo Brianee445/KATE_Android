@@ -3,7 +3,7 @@ package com.kate.assistant.data.db
 import android.content.Context
 import androidx.room.*
 
-@Database(entities = [HabitEntity::class, JournalEntry::class, TaskEntity::class], version = 1, exportSchema = false)
+@Database(entities = [HabitEntity::class, JournalEntity::class, TaskEntity::class], version = 2, exportSchema = false)
 abstract class KateDatabase : RoomDatabase() {
     abstract fun habitDao(): HabitDao
     abstract fun journalDao(): JournalDao
