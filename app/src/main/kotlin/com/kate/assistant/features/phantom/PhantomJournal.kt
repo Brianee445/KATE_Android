@@ -2,6 +2,7 @@ package com.kate.assistant.features.phantom
 
 import android.content.Context
 import android.util.Log
+import com.kate.assistant.data.db.JournalEntity
 import com.kate.assistant.data.db.KateDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,7 +18,7 @@ class PhantomJournal(context: Context) {
             Log.d("PhantomJournal", "Logging app: $pkg")
 
             db.journalDao().insertEvent(
-                "APP_OPEN|$pkg|${System.currentTimeMillis()}"
+                JournalEntity(data = "APP_OPEN|$pkg|${System.currentTimeMillis()}")
             )
         }
     }
