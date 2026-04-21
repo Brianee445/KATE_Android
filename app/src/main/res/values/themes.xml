@@ -1,5 +1,6 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Kate" parent="android:Theme.Material.NoTitleBar">
+    <style name="Theme.Kate" parent="Theme.AppCompat.NoActionBar">
     </style>
 </resources>
