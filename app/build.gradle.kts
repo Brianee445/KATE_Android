@@ -19,8 +19,6 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags("")
-                // Pass Gradle's prefab output dir so CMake can find libtensorflowlite
-                arguments("-DANDROID_STL=c_shared")
             }
         }
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
@@ -33,11 +31,8 @@ android {
         }
     }
 
-    // Gradle extracts the .so from the TFLite AAR and makes it
-    // available to CMake automatically via prefab
     buildFeatures {
         compose = true
-        prefab  = true          // ← tells Gradle to expose AAR native libs to CMake
     }
 
     buildTypes {
@@ -50,6 +45,7 @@ android {
             isDebuggable = true
         }
     }
+
     composeOptions { kotlinCompilerExtensionVersion = "1.5.13" }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -59,32 +55,19 @@ android {
 }
 
 dependencies {
-    // ── TFLite — Gradle downloads + extracts .so automatically ──
     implementation(libs.tflite)
-
-    // ── Hilt ────────────────────────────────────────────────────
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
-
-    // ── Compose ─────────────────────────────────────────────────
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.activity.compose)
-
-    // ── Coroutines ───────────────────────────────────────────────
     implementation(libs.coroutines.android)
-
-    // ── Room ─────────────────────────────────────────────────────
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     kapt(libs.room.compiler)
-
-    // ── DataStore ────────────────────────────────────────────────
     implementation(libs.datastore.preferences)
-
-    // ── Core ─────────────────────────────────────────────────────
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime.ktx)
 }
