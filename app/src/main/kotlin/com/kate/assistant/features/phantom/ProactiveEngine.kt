@@ -33,7 +33,7 @@ class ProactiveEngine(private val context: Context) {
             // 🔍 Build frequency for current hour
             journal.forEach { entry ->
 
-                val parts = entry.split("|")
+                val parts = entry.data.split("|")  // ← fixed: access .data on JournalEntity
 
                 if (parts.size < 3) return@forEach
 
@@ -66,4 +66,3 @@ class ProactiveEngine(private val context: Context) {
             }
         }
     }
-}
