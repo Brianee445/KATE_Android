@@ -1,12 +1,16 @@
 package com.kate.assistant.data.db
 
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
 
 @Dao
 interface JournalDao {
-    @Query("SELECT * FROM journal ORDER BY timestamp DESC")
-    suspend fun getAll(): List<JournalEntry>
 
-    @Insert
-    suspend fun insert(entry: JournalEntry)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEvent(entry: JournalEntity)
+
+    @Query("SELECT * FROM journal")
+    suspend fun getAll(): List<JournalEntity>
 }
