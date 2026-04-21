@@ -2,25 +2,34 @@ package com.kate.assistant.features.voice
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
-import java.util.*
+import android.util.Log
+import java.util.Locale
 
-class KateTTS(context: Context) {
+class KateTts(context: Context) : TextToSpeech.OnInitListener {
 
-    private var tts: TextToSpeech? = null
+    private val tts = TextToSpeech(context, this)
+    private var ready = false
 
-    init {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.US
-            }
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = tts.setLanguage(Locale.US)
+            ready = result != TextToSpeech.LANG_MISSING_DATA &&
+                    result != TextToSpeech.LANG_NOT_SUPPORTED
+            if (!ready) Log.e("KateTts", "Language not supported")
+        } else {
+            Log.e("KateTts", "TTS init failed")
         }
     }
 
     fun speak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+        if (ready) {
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+        } else {
+            Log.w("KateTts", "TTS not ready — queued: $text")
+        }
     }
 
     fun shutdown() {
-        tts?.shutdown()
+        tts.stop()
+        tts.shutdown()
     }
-}
