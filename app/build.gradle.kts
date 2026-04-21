@@ -50,8 +50,7 @@ android {
             isDebuggable = true
         }
     }
-
-    composeOptions { kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get() }
+    composeOptions { kotlinCompilerExtensionVersion = "1.5.13" }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
