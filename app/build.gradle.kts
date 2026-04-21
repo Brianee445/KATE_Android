@@ -70,4 +70,5 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime.ktx)
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }
