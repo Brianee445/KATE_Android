@@ -1,5 +1,4 @@
 #include "intent_parser.h"
-#include "../ml/ml_inference.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +6,6 @@
 extern char app_list[][128];
 extern int  app_count;
 
-// ── Utils ────────────────────────────────────────────────────
 static int contains(TokenList *tokens, const char *word) {
     for (int i = 0; i < tokens->count; i++)
         if (strcmp(tokens->tokens[i], word) == 0) return 1;
@@ -45,11 +43,11 @@ static int extract_delay_ms(TokenList *tokens) {
     for (int i = 0; i < tokens->count; i++) {
         int value = atoi(tokens->tokens[i]);
         if (value > 0 && i + 1 < tokens->count) {
-            if (strcmp(tokens->tokens[i+1], "minute") == 0 ||
+            if (strcmp(tokens->tokens[i+1], "minute")  == 0 ||
                 strcmp(tokens->tokens[i+1], "minutes") == 0)
                 return value * 60 * 1000;
-            if (strcmp(tokens->tokens[i+1], "hour") == 0 ||
-                strcmp(tokens->tokens[i+1], "hours") == 0)
+            if (strcmp(tokens->tokens[i+1], "hour")    == 0 ||
+                strcmp(tokens->tokens[i+1], "hours")   == 0)
                 return value * 3600 * 1000;
         }
     }
@@ -74,15 +72,12 @@ static void build_task_text(TokenList *tokens, char *out, int max_len) {
     }
 }
 
-// ── Main parser ──────────────────────────────────────────────
 void parse_intent(const char *text, IntentResult *result) {
     TokenList tokens;
     tokenize(text, &tokens);
 
     strcpy(result->intent, "UNKNOWN");
     strcpy(result->entity, "");
-
-    // 1. RULE-BASED (highest priority — fast + precise)
 
     // REMINDER
     if (contains(&tokens, "remind") || contains(&tokens, "reminder")) {
@@ -107,31 +102,25 @@ void parse_intent(const char *text, IntentResult *result) {
     }
 
     // MEDIA
-    if (contains(&tokens, "play") || contains(&tokens, "pause") ||
-        contains(&tokens, "next") || contains(&tokens, "resume")) {
+    if (contains(&tokens, "play")   || contains(&tokens, "pause") ||
+        contains(&tokens, "next")   || contains(&tokens, "resume")) {
         strcpy(result->intent, "MEDIA_CONTROL");
         return;
     }
 
-    // CALL / SMS
-    if (contains(&tokens, "call") || contains(&tokens, "dial") ||
-        contains(&tokens, "text") || contains(&tokens, "message") ||
+    // COMMUNICATION
+    if (contains(&tokens, "call")    || contains(&tokens, "dial") ||
+        contains(&tokens, "text")    || contains(&tokens, "message") ||
         contains(&tokens, "sms")) {
         strcpy(result->intent, "COMMUNICATION");
         return;
     }
 
     // SYSTEM
-    if (contains(&tokens, "volume")  || contains(&tokens, "brightness") ||
-        contains(&tokens, "wifi")    || contains(&tokens, "bluetooth")   ||
-        contains(&tokens, "torch")   || contains(&tokens, "flashlight")) {
+    if (contains(&tokens, "volume")      || contains(&tokens, "brightness") ||
+        contains(&tokens, "wifi")        || contains(&tokens, "bluetooth")   ||
+        contains(&tokens, "torch")       || contains(&tokens, "flashlight")) {
         strcpy(result->intent, "SYSTEM_CONTROL");
         return;
-    }
-
-    // 2. ML FALLBACK — only if rules didn't match
-    const char *ml = ml_predict_intent(text);
-    if (strcmp(ml, "UNKNOWN") != 0) {
-        strncpy(result->intent, ml, sizeof(result->intent) - 1);
     }
 }
