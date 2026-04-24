@@ -1,5 +1,3 @@
-package com.kate.assistant.features.phantom
-
 import android.content.Context
 import android.util.Log
 import com.kate.assistant.bridge.KateEvent
