@@ -26,6 +26,14 @@
         android:theme="@style/Theme.Kate"
         android:usesCleartextTraffic="true">
 
+   <application
+        android:name=".KateApp"
+        android:extractNativeLibs="true"
+        android:allowBackup="false"
+        android:icon="@drawable/ic_kate"
+        android:label="Kate"
+        android:theme="@style/Theme.Kate">
+
         <!-- ================= MAIN ACTIVITY ================= -->
 
         <activity
