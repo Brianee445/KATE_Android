@@ -3,6 +3,7 @@ project(kate_core C)
 
 add_library(kate_core SHARED
     bridge.c
+    suggestions.c           # <--- ADDED THIS LINE
     audio/audio_stream.c
     audio/wake_word.c
     audio/vad.c
