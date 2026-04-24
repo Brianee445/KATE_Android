@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include "../kate_core.h"
 #include "habit_engine.h"
 #include <string.h>
 
