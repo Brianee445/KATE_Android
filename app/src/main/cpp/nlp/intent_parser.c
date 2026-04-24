@@ -12,11 +12,13 @@ static int contains(TokenList *tokens, const char *word) {
     return 0;
 }
 
+// FIXED: Added i++ inside loop
 static void extract_app_name(const char *entry, char *name_out) {
     int i = 0;
-    while (entry[i] != '|' && entry[i] != '\0' && i < 63)
+    while (entry[i] != '|' && entry[i] != '\0' && i < 63) {
         name_out[i] = entry[i];
-    i++;
+        i++;  // <-- THIS WAS MISSING
+    }
     name_out[i] = '\0';
 }
 
@@ -71,14 +73,18 @@ static void build_task_text(TokenList *tokens, char *out, int max_len) {
             strcat(out, " ");
         }
     }
+    // FIXED: trim trailing space
+    size_t len = strlen(out);
+    if (len > 0 && out[len-1] == ' ') out[len-1] = '\0';
 }
 
 void parse_intent(const char *text, IntentResult *result) {
     TokenList tokens;
     tokenize(text, &tokens);
 
-    strcpy(result->intent, "UNKNOWN");
-    strcpy(result->entity, "");
+    // FIXED: safe copies
+    snprintf(result->intent, sizeof(result->intent), "UNKNOWN");
+    result->entity[0] = '\0';
 
     // REMINDER
     if (contains(&tokens, "remind") || contains(&tokens, "reminder")) {
@@ -86,7 +92,7 @@ void parse_intent(const char *text, IntentResult *result) {
         if (delay > 0) {
             char task[64];
             build_task_text(&tokens, task, sizeof(task));
-            strcpy(result->intent, "REMINDER");
+            snprintf(result->intent, sizeof(result->intent), "REMINDER");
             snprintf(result->entity, sizeof(result->entity), "%s|%d", task, delay);
             return;
         }
@@ -96,8 +102,8 @@ void parse_intent(const char *text, IntentResult *result) {
     if (contains(&tokens, "open") || contains(&tokens, "launch")) {
         const char *pkg = find_app(&tokens);
         if (pkg) {
-            strcpy(result->intent, "OPEN_APP");
-            strncpy(result->entity, pkg, sizeof(result->entity) - 1);
+            snprintf(result->intent, sizeof(result->intent), "OPEN_APP");
+            snprintf(result->entity, sizeof(result->entity), "%s", pkg); // FIXED: guaranteed \0
             return;
         }
     }
@@ -105,7 +111,7 @@ void parse_intent(const char *text, IntentResult *result) {
     // MEDIA
     if (contains(&tokens, "play")   || contains(&tokens, "pause") ||
         contains(&tokens, "next")   || contains(&tokens, "resume")) {
-        strcpy(result->intent, "MEDIA_CONTROL");
+        snprintf(result->intent, sizeof(result->intent), "MEDIA_CONTROL");
         return;
     }
 
@@ -113,7 +119,7 @@ void parse_intent(const char *text, IntentResult *result) {
     if (contains(&tokens, "call")    || contains(&tokens, "dial") ||
         contains(&tokens, "text")    || contains(&tokens, "message") ||
         contains(&tokens, "sms")) {
-        strcpy(result->intent, "COMMUNICATION");
+        snprintf(result->intent, sizeof(result->intent), "COMMUNICATION");
         return;
     }
 
@@ -121,7 +127,7 @@ void parse_intent(const char *text, IntentResult *result) {
     if (contains(&tokens, "volume")      || contains(&tokens, "brightness") ||
         contains(&tokens, "wifi")        || contains(&tokens, "bluetooth")   ||
         contains(&tokens, "torch")       || contains(&tokens, "flashlight")) {
-        strcpy(result->intent, "SYSTEM_CONTROL");
+        snprintf(result->intent, sizeof(result->intent), "SYSTEM_CONTROL");
         return;
     }
 }
