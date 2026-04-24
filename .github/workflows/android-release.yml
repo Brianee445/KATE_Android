@@ -21,20 +21,20 @@ jobs:
       - name: Set up Android NDK
         uses: android-actions/setup-android@v3
 
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > $GITHUB_WORKSPACE/kate.jks
+
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Build release APK
+      - name: Build & sign release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/kate.jks
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease
-
-      - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
