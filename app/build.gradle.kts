@@ -17,9 +17,7 @@ android {
         versionName   = "1.0.0"
 
         externalNativeBuild {
-            cmake {
-                cppFlags("")
-            }
+            cmake { cppFlags("") }
         }
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
@@ -31,6 +29,19 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile      = file(System.getenv("KEYSTORE_PATH") ?: "kate.jks")
+            storePassword  = System.getenv("KEY_STORE_PASSWORD") ?: ""
+            keyAlias       = System.getenv("KEY_ALIAS") ?: ""
+            keyPassword    = System.getenv("KEY_PASSWORD") ?: ""
+            enableV1Signing = false   // V1 not needed on API 29+
+            enableV2Signing = true    // Required
+            enableV3Signing = true    // Android 9+ preferred
+            enableV4Signing = true    // Incremental ADB installs
+        }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -39,10 +50,13 @@ android {
         release {
             isMinifyEnabled   = true
             isShrinkResources = true
+            signingConfig     = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
-            isDebuggable = true
+            isDebuggable  = true
+            // Force V2/V3 on debug too so sideloading works on Android 14
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
