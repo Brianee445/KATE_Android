@@ -3,6 +3,7 @@
 
     <!-- ================= PERMISSIONS ================= -->
 
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Microphone -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
