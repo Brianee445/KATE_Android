@@ -15,7 +15,8 @@ static int contains(TokenList *tokens, const char *word) {
 static void extract_app_name(const char *entry, char *name_out) {
     int i = 0;
     while (entry[i] != '|' && entry[i] != '\0' && i < 63)
-        name_out[i] = entry[i++];
+        name_out[i] = entry[i];
+    i++;
     name_out[i] = '\0';
 }
 
