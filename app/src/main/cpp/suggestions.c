@@ -1,67 +1,14 @@
-import android.content.Context
-import android.util.Log
-import com.kate.assistant.bridge.KateEvent
-import com.kate.assistant.bridge.KateEventBus
-import com.kate.assistant.data.db.KateDatabase
-import kotlinx.coroutines.*
-import java.util.*
+#include "kate_core.h"
+#include <time.h>
 
-class ProactiveEngine(private val context: Context) {
-
-    private val db = KateDatabase.getDatabase(context)
-
-    private var lastSuggestionTime = 0L
-    private val cooldown = 1000 * 60 * 10 // 10 mins
-
-    fun evaluate() {
-
-        CoroutineScope(Dispatchers.IO).launch {
-
-            val now = System.currentTimeMillis()
-
-            // cooldown protection
-            if (now - lastSuggestionTime < cooldown) return@launch
-
-            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-
-            val journal = db.journalDao().getAll()
-
-            val freqMap = mutableMapOf<String, Int>()
-
-            // 🔍 Build frequency for current hour
-            journal.forEach { entry ->
-
-                val parts = entry.data.split("|")  // ← fixed: access .data on JournalEntity
-
-                if (parts.size < 3) return@forEach
-
-                val type = parts[0]
-                val pkg = parts[1]
-                val time = parts[2].toLongOrNull() ?: return@forEach
-
-                val cal = Calendar.getInstance()
-                cal.timeInMillis = time
-
-                val eventHour = cal.get(Calendar.HOUR_OF_DAY)
-
-                if (type == "APP_OPEN" && eventHour == hour) {
-                    freqMap[pkg] = (freqMap[pkg] ?: 0) + 1
-                }
-            }
-
-            // Find best candidate
-            val best = freqMap.maxByOrNull { it.value }
-
-            if (best != null && best.value >= 3) {
-
-                Log.d("ProactiveEngine", "Suggesting: ${best.key}")
-
-                lastSuggestionTime = now
-
-                KateEventBus.emit(
-                    KateEvent.Suggestion(best.key)
-                )
-            }
-        }
-    }
+const char* get_suggestion(int hour) {
+    if (hour >= 6 && hour < 9)
+        return "Good morning! Time for your morning routine.";
+    if (hour >= 12 && hour < 14)
+        return "Lunch time! Don't forget to eat.";
+    if (hour >= 17 && hour < 20)
+        return "Evening! Time to wind down.";
+    if (hour >= 22 || hour < 6)
+        return "It's late. Consider going to bed.";
+    return NULL;
 }
