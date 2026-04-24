@@ -17,8 +17,8 @@ static JavaVM *g_vm = NULL;
 static jobject g_bridge_obj = NULL;
 
 #define MAX_APPS 128
-static char app_list[MAX_APPS][128];
-static int  app_count = 0;
+ char app_list[MAX_APPS][128];
+ int  app_count = 0;
 
 // ================= JNI SETUP =================
 
