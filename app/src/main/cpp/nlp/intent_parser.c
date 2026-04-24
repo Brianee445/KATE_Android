@@ -1,4 +1,5 @@
 #include "intent_parser.h"
+#include "tokenizer.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,31 +8,37 @@ extern char app_list[][128];
 extern int  app_count;
 
 static int contains(TokenList *tokens, const char *word) {
-    for (int i = 0; i < tokens->count; i++)
+    if (!tokens || !word) return 0;
+    for (int i = 0; i < tokens->count; i++) {
         if (strcmp(tokens->tokens[i], word) == 0) return 1;
+    }
     return 0;
 }
 
-// FIXED: Added i++ inside loop
-static void extract_app_name(const char *entry, char *name_out) {
-    int i = 0;
-    while (entry[i] != '|' && entry[i] != '\0' && i < 63) {
+static void extract_app_name(const char *entry, char *name_out, size_t name_out_len) {
+    if (!entry || !name_out || name_out_len == 0) return;
+
+    size_t i = 0;
+    while (entry[i] != '|' && entry[i] != '\0' && i < name_out_len - 1) {
         name_out[i] = entry[i];
-        i++;  // <-- THIS WAS MISSING
+        i++;
     }
     name_out[i] = '\0';
 }
 
 static const char* extract_package(const char *entry) {
+    if (!entry) return NULL;
     const char *pipe = strchr(entry, '|');
     return (pipe && *(pipe + 1) != '\0') ? pipe + 1 : NULL;
 }
 
 static const char* find_app(TokenList *tokens) {
+    if (!tokens || app_count <= 0) return NULL;
+
     char app_name[64];
     for (int i = 0; i < tokens->count; i++) {
         for (int j = 0; j < app_count; j++) {
-            extract_app_name(app_list[j], app_name);
+            extract_app_name(app_list[j], app_name, sizeof(app_name));
             if (strcmp(tokens->tokens[i], app_name) == 0 ||
                 strstr(app_name, tokens->tokens[i]) != NULL) {
                 const char *pkg = extract_package(app_list[j]);
@@ -43,6 +50,8 @@ static const char* find_app(TokenList *tokens) {
 }
 
 static int extract_delay_ms(TokenList *tokens) {
+    if (!tokens) return -1;
+
     for (int i = 0; i < tokens->count; i++) {
         int value = atoi(tokens->tokens[i]);
         if (value > 0 && i + 1 < tokens->count) {
@@ -58,33 +67,52 @@ static int extract_delay_ms(TokenList *tokens) {
 }
 
 static void build_task_text(TokenList *tokens, char *out, int max_len) {
+    if (!tokens || !out || max_len <= 0) return;
+
     out[0] = '\0';
+    int written = 0;
+
     for (int i = 0; i < tokens->count; i++) {
-        if (strcmp(tokens->tokens[i], "remind") == 0 ||
-            strcmp(tokens->tokens[i], "me")     == 0 ||
-            strcmp(tokens->tokens[i], "to")     == 0 ||
-            strcmp(tokens->tokens[i], "in")     == 0) continue;
-        if (strcmp(tokens->tokens[i], "minute")  == 0 ||
-            strcmp(tokens->tokens[i], "minutes") == 0 ||
-            strcmp(tokens->tokens[i], "hour")    == 0 ||
-            strcmp(tokens->tokens[i], "hours")   == 0) break;
-        if (strlen(out) + strlen(tokens->tokens[i]) + 2 < (size_t)max_len) {
-            strcat(out, tokens->tokens[i]);
-            strcat(out, " ");
+        const char *tok = tokens->tokens[i];
+
+        if (strcmp(tok, "remind") == 0 ||
+            strcmp(tok, "me")     == 0 ||
+            strcmp(tok, "to")     == 0 ||
+            strcmp(tok, "in")     == 0) continue;
+
+        if (strcmp(tok, "minute")  == 0 ||
+            strcmp(tok, "minutes") == 0 ||
+            strcmp(tok, "hour")    == 0 ||
+            strcmp(tok, "hours")   == 0) break;
+
+        int tok_len = (int)strlen(tok);
+        if (written + tok_len + 2 < max_len) {
+            if (written > 0) {
+                out[written++] = ' ';
+                out[written] = '\0';
+            }
+            strcat(out, tok);
+            written += tok_len;
+        } else {
+            break;
         }
     }
-    // FIXED: trim trailing space
-    size_t len = strlen(out);
-    if (len > 0 && out[len-1] == ' ') out[len-1] = '\0';
+
+    // Trim trailing space if any
+    if (written > 0 && out[written - 1] == ' ') {
+        out[written - 1] = '\0';
+    }
 }
 
 void parse_intent(const char *text, IntentResult *result) {
+    if (!text || !result) return;
+
     TokenList tokens;
+    tokens.count = 0;
     tokenize(text, &tokens);
 
-    // FIXED: safe copies
-    snprintf(result->intent, sizeof(result->intent), "UNKNOWN");
-    result->entity[0] = '\0';
+    strcpy(result->intent, "UNKNOWN");
+    strcpy(result->entity, "");
 
     // REMINDER
     if (contains(&tokens, "remind") || contains(&tokens, "reminder")) {
@@ -92,7 +120,7 @@ void parse_intent(const char *text, IntentResult *result) {
         if (delay > 0) {
             char task[64];
             build_task_text(&tokens, task, sizeof(task));
-            snprintf(result->intent, sizeof(result->intent), "REMINDER");
+            strcpy(result->intent, "REMINDER");
             snprintf(result->entity, sizeof(result->entity), "%s|%d", task, delay);
             return;
         }
@@ -102,8 +130,9 @@ void parse_intent(const char *text, IntentResult *result) {
     if (contains(&tokens, "open") || contains(&tokens, "launch")) {
         const char *pkg = find_app(&tokens);
         if (pkg) {
-            snprintf(result->intent, sizeof(result->intent), "OPEN_APP");
-            snprintf(result->entity, sizeof(result->entity), "%s", pkg); // FIXED: guaranteed \0
+            strcpy(result->intent, "OPEN_APP");
+            strncpy(result->entity, pkg, sizeof(result->entity) - 1);
+            result->entity[sizeof(result->entity) - 1] = '\0';
             return;
         }
     }
@@ -111,7 +140,7 @@ void parse_intent(const char *text, IntentResult *result) {
     // MEDIA
     if (contains(&tokens, "play")   || contains(&tokens, "pause") ||
         contains(&tokens, "next")   || contains(&tokens, "resume")) {
-        snprintf(result->intent, sizeof(result->intent), "MEDIA_CONTROL");
+        strcpy(result->intent, "MEDIA_CONTROL");
         return;
     }
 
@@ -119,7 +148,7 @@ void parse_intent(const char *text, IntentResult *result) {
     if (contains(&tokens, "call")    || contains(&tokens, "dial") ||
         contains(&tokens, "text")    || contains(&tokens, "message") ||
         contains(&tokens, "sms")) {
-        snprintf(result->intent, sizeof(result->intent), "COMMUNICATION");
+        strcpy(result->intent, "COMMUNICATION");
         return;
     }
 
@@ -127,7 +156,7 @@ void parse_intent(const char *text, IntentResult *result) {
     if (contains(&tokens, "volume")      || contains(&tokens, "brightness") ||
         contains(&tokens, "wifi")        || contains(&tokens, "bluetooth")   ||
         contains(&tokens, "torch")       || contains(&tokens, "flashlight")) {
-        snprintf(result->intent, sizeof(result->intent), "SYSTEM_CONTROL");
+        strcpy(result->intent, "SYSTEM_CONTROL");
         return;
     }
 }
