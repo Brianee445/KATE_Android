@@ -1,67 +1,172 @@
-import android.content.Context
-import android.util.Log
-import com.kate.assistant.bridge.KateEvent
-import com.kate.assistant.bridge.KateEventBus
-import com.kate.assistant.data.db.KateDatabase
-import kotlinx.coroutines.*
-import java.util.*
+#include <jni.h>
+#include <string.h>
+#include <stdio.h>
+#include <time.h>
 
-class ProactiveEngine(private val context: Context) {
+#include "kate_core.h"
+#include "audio/audio_stream.h"
+#include "nlp/intent_parser.h"
+#include "brain/habit_engine.h"
+#include "brain/situation_engine.h"
+#include "brain/emotion_engine.h"
+#include "brain/decision_engine.h"
 
-    private val db = KateDatabase.getDatabase(context)
+// ================= GLOBALS =================
 
-    private var lastSuggestionTime = 0L
-    private val cooldown = 1000 * 60 * 10 // 10 mins
+static JavaVM *g_vm = NULL;
+static jobject g_bridge_obj = NULL;
 
-    fun evaluate() {
+#define MAX_APPS 128
+char app_list[MAX_APPS][128];
+int  app_count = 0;
 
-        CoroutineScope(Dispatchers.IO).launch {
+// ================= JNI SETUP =================
 
-            val now = System.currentTimeMillis()
+JNIEnv* get_jni_env() {
+    JNIEnv *env;
+    if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) != 0) return NULL;
+    return env;
+}
 
-            // cooldown protection
-            if (now - lastSuggestionTime < cooldown) return@launch
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
+    g_vm = vm;
+    return JNI_VERSION_1_6;
+}
 
-            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+// ================= EVENT SYSTEM =================
 
-            val journal = db.journalDao().getAll()
+void send_event(const char* type, const char* payload) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_bridge_obj) return;
 
-            val freqMap = mutableMapOf<String, Int>()
+    jclass cls = (*env)->GetObjectClass(env, g_bridge_obj);
+    jmethodID method = (*env)->GetMethodID(env, cls,
+        "onNativeEvent", "(Ljava/lang/String;Ljava/lang/String;)V");
+    if (!method) return;
 
-            // 🔍 Build frequency for current hour
-            journal.forEach { entry ->
+    jstring jType    = (*env)->NewStringUTF(env, type);
+    jstring jPayload = (*env)->NewStringUTF(env, payload);
+    (*env)->CallVoidMethod(env, g_bridge_obj, method, jType, jPayload);
+    (*env)->DeleteLocalRef(env, jType);
+    (*env)->DeleteLocalRef(env, jPayload);
+}
 
-                val parts = entry.data.split("|")  // ← fixed: access .data on JournalEntity
+// ================= INIT =================
 
-                if (parts.size < 3) return@forEach
+JNIEXPORT void JNICALL
+Java_com_kate_assistant_bridge_KateBridge_nativeInit(
+        JNIEnv *env, jobject thiz) {
+    g_bridge_obj = (*env)->NewGlobalRef(env, thiz);
+}
 
-                val type = parts[0]
-                val pkg = parts[1]
-                val time = parts[2].toLongOrNull() ?: return@forEach
+// ================= AUDIO =================
 
-                val cal = Calendar.getInstance()
-                cal.timeInMillis = time
+JNIEXPORT void JNICALL
+Java_com_kate_assistant_bridge_KateBridge_startAudio(
+        JNIEnv *env, jobject thiz) {
+    start_audio_stream();
+}
 
-                val eventHour = cal.get(Calendar.HOUR_OF_DAY)
+JNIEXPORT void JNICALL
+Java_com_kate_assistant_bridge_KateBridge_stopAudio(
+        JNIEnv *env, jobject thiz) {
+    stop_audio_stream();
+}
 
-                if (type == "APP_OPEN" && eventHour == hour) {
-                    freqMap[pkg] = (freqMap[pkg] ?: 0) + 1
-                }
-            }
+// ================= APP LIST =================
 
-            // Find best candidate
-            val best = freqMap.maxByOrNull { it.value }
+JNIEXPORT void JNICALL
+Java_com_kate_assistant_bridge_KateBridge_updateAppList(
+        JNIEnv *env, jobject thiz, jobjectArray apps) {
+    app_count = 0;
+    int len = (*env)->GetArrayLength(env, apps);
+    for (int i = 0; i < len && i < MAX_APPS; i++) {
+        jstring str = (jstring)(*env)->GetObjectArrayElement(env, apps, i);
+        const char *s = (*env)->GetStringUTFChars(env, str, 0);
+        strncpy(app_list[app_count], s, 127);
+        app_list[app_count][127] = '\0';
+        app_count++;
+        (*env)->ReleaseStringUTFChars(env, str, s);
+        (*env)->DeleteLocalRef(env, str);
+    }
+}
 
-            if (best != null && best.value >= 3) {
+// ================= HABITS =================
 
-                Log.d("ProactiveEngine", "Suggesting: ${best.key}")
+JNIEXPORT void JNICALL
+Java_com_kate_assistant_bridge_KateBridge_loadHabits(
+        JNIEnv *env, jobject thiz, jobjectArray habits) {
+    int len = (*env)->GetArrayLength(env, habits);
+    for (int i = 0; i < len; i++) {
+        jstring str = (jstring)(*env)->GetObjectArrayElement(env, habits, i);
+        const char *s = (*env)->GetStringUTFChars(env, str, 0);
+        char intent[32], entity[64];
+        int count = 0;
+        sscanf(s, "%31[^|]|%63[^|]|%d", intent, entity, &count);
+        load_habit(intent, entity, count);
+        (*env)->ReleaseStringUTFChars(env, str, s);
+        (*env)->DeleteLocalRef(env, str);
+    }
+}
 
-                lastSuggestionTime = now
+// ================= NLP =================
 
-                KateEventBus.emit(
-                    KateEvent.Suggestion(best.key)
-                )
-            }
+JNIEXPORT void JNICALL
+Java_com_kate_assistant_bridge_KateBridge_processText(
+        JNIEnv *env, jobject thiz, jstring text) {
+    const char *nativeText = (*env)->GetStringUTFChars(env, text, 0);
+
+    IntentResult result;
+    parse_intent(nativeText, &result);
+
+    float audio_energy = 0.03f;
+    EmotionState emotion = detect_emotion(nativeText, audio_energy);
+    const char* emotion_str = emotion_to_string(emotion);
+
+    const char* final_intent = decide_intent(
+        result.intent, result.intent, result.entity, emotion_str);
+
+    if (strlen(result.entity) == 0) {
+        const char* preferred = get_preferred_entity(final_intent);
+        if (preferred) {
+            strncpy(result.entity, preferred, 63);
+            result.entity[63] = '\0';
         }
     }
+
+    record_habit(final_intent, result.entity);
+
+    const char* adapted = evaluate_situation(final_intent, result.entity);
+
+    char payload[192];
+    snprintf(payload, sizeof(payload), "%s|%s|%s",
+             adapted, result.entity, emotion_str);
+    send_event("INTENT", payload);
+
+    (*env)->ReleaseStringUTFChars(env, text, nativeText);
+}
+
+// ================= SUGGESTIONS =================
+
+JNIEXPORT void JNICALL
+Java_com_kate_assistant_bridge_KateBridge_requestSuggestion(
+        JNIEnv *env, jobject thiz) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    const char* suggestion = get_suggestion(t->tm_hour);
+    if (suggestion) send_event("SUGGESTION", suggestion);
+}
+
+// ================= WAKE WORD CALLBACK =================
+
+void notify_wake_word_detected(void) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_bridge_obj) return;
+
+    jclass cls = (*env)->GetObjectClass(env, g_bridge_obj);
+    jmethodID method = (*env)->GetMethodID(env, cls,
+        "onWakeWordDetected", "()V");
+    if (!method) return;
+
+    (*env)->CallVoidMethod(env, g_bridge_obj, method);
 }
