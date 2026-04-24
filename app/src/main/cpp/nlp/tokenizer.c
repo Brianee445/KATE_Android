@@ -27,4 +27,3 @@ void tokenize(const char *text, TokenList *out) {
         buffer[j] = '\0';
         strcpy(out->tokens[out->count++], buffer);
     }
-}
