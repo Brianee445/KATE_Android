@@ -44,3 +44,4 @@ class KateTts(private val context: Context) {
             engine.setSpeechRate(0.97f)
         }
     }
+}
