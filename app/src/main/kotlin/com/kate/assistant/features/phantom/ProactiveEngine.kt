@@ -21,7 +21,7 @@ class ProactiveEngine(private val context: Context) {
 
             val now = System.currentTimeMillis()
 
-            //  cooldown protection
+            // cooldown protection
             if (now - lastSuggestionTime < cooldown) return@launch
 
             val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -51,7 +51,7 @@ class ProactiveEngine(private val context: Context) {
                 }
             }
 
-            // find best candidate
+            // Find best candidate
             val best = freqMap.maxByOrNull { it.value }
 
             if (best != null && best.value >= 3) {
@@ -66,3 +66,4 @@ class ProactiveEngine(private val context: Context) {
             }
         }
     }
+}
