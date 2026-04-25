@@ -1,3 +1,4 @@
+#include "suggestions.h"
 #include "kate_core.h"
 #include <time.h>
 
