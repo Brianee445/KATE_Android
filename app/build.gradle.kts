@@ -13,8 +13,8 @@ android {
         applicationId   = "com.kate.assistant"
         minSdk          = 26
         targetSdk       = 34
-        versionCode     = 1
-        versionName     = "1.0.0"
+        versionCode     = 2
+        versionName     = "1.0.1"
         multiDexEnabled = true
 
         externalNativeBuild {
@@ -58,7 +58,10 @@ android {
             isMinifyEnabled   = true
             isShrinkResources = true
             signingConfig     = signingConfigs.getByName("release")
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
         debug {
             isDebuggable  = true
