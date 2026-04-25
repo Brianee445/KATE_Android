@@ -18,15 +18,11 @@ android {
         multiDexEnabled = true
 
         externalNativeBuild {
-            cmake {
-                cppFlags("")
-                arguments(
-                    "-DANDROID_ABI=arm64-v8a",
-                    "-DANDROID_PLATFORM=android-26",
-                    "-DANDROID_STL=c_shared"
-                )
-            }
-        }
+    cmake {
+        cppFlags("")
+        arguments("-DANDROID_PLATFORM=android-26")
+       }
+    }
         // Unisoc T606 is arm64-v8a only
         ndk { abiFilters += listOf("arm64-v8a") }
     }
