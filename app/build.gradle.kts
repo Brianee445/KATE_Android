@@ -11,23 +11,26 @@ android {
 
     defaultConfig {
         applicationId = "com.kate.assistant"
-        minSdk        = 29
+        minSdk        = 26
         targetSdk     = 35
         versionCode   = 1
         versionName   = "1.0.0"
+        multiDexEnabled = true
 
-        externalNativeBuild {
-            cmake { cppFlags("") }
-        }
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        // NDK temporarily disabled for install test
+        // externalNativeBuild {
+        //     cmake { cppFlags("") }
+        // }
+        // ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
-    externalNativeBuild {
-        cmake {
-            path    = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
+    // NDK temporarily disabled for install test
+    // externalNativeBuild {
+    //     cmake {
+    //         path    = file("src/main/cpp/CMakeLists.txt")
+    //         version = "3.22.1"
+    //     }
+    // }
 
     signingConfigs {
         create("release") {
@@ -35,10 +38,10 @@ android {
             storePassword  = System.getenv("KEY_STORE_PASSWORD") ?: ""
             keyAlias       = System.getenv("KEY_ALIAS") ?: ""
             keyPassword    = System.getenv("KEY_PASSWORD") ?: ""
-            enableV1Signing = false   // V1 not needed on API 29+
-            enableV2Signing = true    // Required
-            enableV3Signing = true    // Android 9+ preferred
-            enableV4Signing = true    // Incremental ADB installs
+            enableV1Signing = false
+            enableV2Signing = true
+            enableV3Signing = true
+            enableV4Signing = true
         }
     }
 
@@ -48,14 +51,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled   = true
+            isMinifyEnabled   = false
             isShrinkResources = false
             signingConfig     = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
             isDebuggable  = true
-            // Force V2/V3 on debug too so sideloading works on Android 14
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -85,4 +87,5 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime.ktx)
     implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.multidex:multidex:2.0.1")
 }
