@@ -45,8 +45,8 @@ jobs:
           unzip -o $APK "lib/*" -d /tmp/apk_check
           file /tmp/apk_check/lib/arm64-v8a/libkate_core.so
 
-          - name: Verify APK signing and alignment
-        run: |
+       - name: Verify APK signing and alignment
+         run: |
           APK=app/build/outputs/apk/release/*.apk
           echo "=== ZIPALIGN CHECK ==="
           $ANDROID_HOME/build-tools/34.0.0/zipalign -c -v 4 $APK
