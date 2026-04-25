@@ -101,4 +101,3 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.multidex:multidex:2.0.1")
 }
-And for gradle.properties add this one line
