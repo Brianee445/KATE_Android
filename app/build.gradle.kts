@@ -13,8 +13,8 @@ android {
         applicationId   = "com.kate.assistant"
         minSdk          = 26
         targetSdk       = 34
-        versionCode     = 3
-        versionName     = "1.0.2"
+        versionCode     = 4
+        versionName     = "1.0.3"
         multiDexEnabled = true
 
         externalNativeBuild {
@@ -101,3 +101,4 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.multidex:multidex:2.0.1")
 }
+And for gradle.properties add this one line
