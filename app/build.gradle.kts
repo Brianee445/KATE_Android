@@ -17,20 +17,26 @@ android {
         versionName   = "1.0.0"
         multiDexEnabled = true
 
-        // NDK temporarily disabled for install test
-        // externalNativeBuild {
-        //     cmake { cppFlags("") }
-        // }
-        // ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        externalNativeBuild {
+            cmake {
+                cppFlags("")
+                arguments(
+                    "-DANDROID_ABI=arm64-v8a",
+                    "-DANDROID_PLATFORM=android-26",
+                    "-DANDROID_STL=c_shared"
+                )
+            }
+        }
+        // Unisoc T606 is arm64-v8a only
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
-    // NDK temporarily disabled for install test
-    // externalNativeBuild {
-    //     cmake {
-    //         path    = file("src/main/cpp/CMakeLists.txt")
-    //         version = "3.22.1"
-    //     }
-    // }
+    externalNativeBuild {
+        cmake {
+            path    = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 
     signingConfigs {
         create("release") {
