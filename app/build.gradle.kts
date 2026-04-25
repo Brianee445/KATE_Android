@@ -10,20 +10,22 @@ android {
     compileSdk  = 35
 
     defaultConfig {
-        applicationId = "com.kate.assistant"
-        minSdk        = 26
-        targetSdk     = 35
-        versionCode   = 1
-        versionName   = "1.0.0"
+        applicationId   = "com.kate.assistant"
+        minSdk          = 26
+        targetSdk       = 34
+        versionCode     = 1
+        versionName     = "1.0.0"
         multiDexEnabled = true
 
         externalNativeBuild {
-    cmake {
-        cppFlags("")
-        arguments("-DANDROID_PLATFORM=android-26")
-       }
-    }
-        // Unisoc T606 is arm64-v8a only
+            cmake {
+                cppFlags("")
+                arguments(
+                    "-DANDROID_PLATFORM=android-26",
+                    "-DANDROID_ARM_NEON=TRUE"
+                )
+            }
+        }
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
@@ -53,8 +55,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled   = false
-            isShrinkResources = false
+            isMinifyEnabled   = true
+            isShrinkResources = true
             signingConfig     = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -73,7 +75,6 @@ android {
 }
 
 dependencies {
-    implementation(libs.tflite)
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
     implementation(platform(libs.compose.bom))
