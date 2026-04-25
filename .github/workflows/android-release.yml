@@ -43,8 +43,14 @@ jobs:
           unzip -l $APK | grep "lib/"
           echo "=== .SO FILE INFO ==="
           unzip -o $APK "lib/*" -d /tmp/apk_check
-          file /tmp/apk_check/lib/arm64-v8a/libkate_core.so
-
+          file /tmp/apk_check/lib/arm64-v8a/libkate_core.socontinue-on-error: 
+     
+      - name: Verify native library packaging
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          echo "=== LIB PACKAGING CHECK ==="
+          unzip -v $APK | grep "\.so"
+          
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
