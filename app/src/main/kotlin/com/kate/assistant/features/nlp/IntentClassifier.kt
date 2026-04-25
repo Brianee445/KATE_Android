@@ -1,22 +1,18 @@
 package com.kate.assistant.features.nlp
 
 import android.content.Context
-import org.tensorflow.lite.Interpreter
-import java.nio.ByteBuffer
 
-class IntentClassifier(context: Context) {
+class IntentClassifier(private val context: Context) {
 
-    private val interpreter: Interpreter
+    // TFLite removed — intent classification handled by C rules engine
+    // This class kept as a stub for future on-device model integration
 
-    init {
-        val model = context.assets.open("model_intent.tflite").readBytes()
-        interpreter = Interpreter(ByteBuffer.wrap(model))
+    fun classify(text: String): String {
+        // All classification now done in C via bridge.processText()
+        return "UNKNOWN"
     }
 
-    fun classify(input: FloatArray): Int {
-        val output = Array(1) { FloatArray(6) } // adjust to your intents
-        interpreter.run(arrayOf(input), output)
-
-        return output[0].indices.maxByOrNull { output[0][it] } ?: 0
+    fun close() {
+        // Nothing to close
     }
 }
