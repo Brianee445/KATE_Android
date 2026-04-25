@@ -10,8 +10,6 @@
 #include "nlp/tokenizer.h"
 #include <string.h>
 
-// ── Safe fallbacks if any engine is incomplete ───────────────
-
 __attribute__((weak)) void start_audio_stream(void) {}
 __attribute__((weak)) void stop_audio_stream(void)  {}
 
@@ -36,7 +34,8 @@ __attribute__((weak)) const char* emotion_to_string(EmotionState s) {
 }
 
 __attribute__((weak)) const char* decide_intent(
-    const char* a, const char* b, const char* c, const char* d) {
+    const char* a, const char* b,
+    const char* c, const char* d) {
     (void)b; (void)c; (void)d; return a;
 }
 
@@ -49,7 +48,7 @@ __attribute__((weak)) void parse_intent(const char* t, IntentResult* r) {
     (void)t;
     if (r) {
         strncpy(r->intent, "UNKNOWN", sizeof(r->intent) - 1);
-        strncpy(r->entity, "", sizeof(r->entity) - 1);
+        strncpy(r->entity, "",        sizeof(r->entity)  - 1);
     }
 }
 
