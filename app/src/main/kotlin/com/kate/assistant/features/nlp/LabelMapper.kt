@@ -1,25 +1,18 @@
 package com.kate.assistant.features.nlp
 
 import android.content.Context
-import org.json.JSONObject
 
-class LabelMapper(context: Context) {
+class LabelMapper(private val context: Context) {
 
-    private val map: Map<Int, String>
-
-    init {
-        val json = context.assets.open("labels.json")
-            .bufferedReader()
-            .use { it.readText() }
-
-        val obj = JSONObject(json)
-
-        map = obj.keys().asSequence().associate {
-            it.toInt() to obj.getString(it)
-        }
-    }
-
+    // Labels now matched in C ml_inference.c
     fun getLabel(index: Int): String {
-        return map[index] ?: "UNKNOWN"
+        return when (index) {
+            0 -> "COMMUNICATION"
+            1 -> "MEDIA_CONTROL"
+            2 -> "OPEN_APP"
+            3 -> "REMINDER"
+            4 -> "SYSTEM_CONTROL"
+            else -> "UNKNOWN"
+        }
     }
 }
