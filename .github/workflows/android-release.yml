@@ -44,7 +44,17 @@ jobs:
           echo "=== .SO FILE INFO ==="
           unzip -o $APK "lib/*" -d /tmp/apk_check
           file /tmp/apk_check/lib/arm64-v8a/libkate_core.so
-          
+
+          - name: Verify APK signing and alignment
+        run: |
+          APK=app/build/outputs/apk/release/*.apk
+          echo "=== ZIPALIGN CHECK ==="
+          $ANDROID_HOME/build-tools/34.0.0/zipalign -c -v 4 $APK
+          echo "=== SIGNATURE CHECK ==="
+          $ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose $APK
+          echo "=== MANIFEST CHECK ==="
+          unzip -p $APK AndroidManifest.xml | strings | grep -E "min|target|package|extract"
+    
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
