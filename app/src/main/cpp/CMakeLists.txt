@@ -17,10 +17,8 @@ add_library(kate_core SHARED
 )
 
 find_library(log-lib log)
-find_library(aaudio-lib aaudio)
 
 target_link_libraries(kate_core
-    ${aaudio-lib}
     ${log-lib}
     m
 )
@@ -34,7 +32,6 @@ target_compile_options(kate_core PRIVATE
     -fPIC
 )
 
-# 16KB page alignment — required for Android 14+ installation
 target_link_options(kate_core PRIVATE
     -Wl,-z,max-page-size=16384
 )
