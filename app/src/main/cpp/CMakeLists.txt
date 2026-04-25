@@ -4,7 +4,7 @@ project(kate_core C)
 add_library(kate_core SHARED
     bridge.c
     kate_stubs.c
-    suggestions.c           # <--- ADDED THIS LINE
+    suggestions.c
     audio/audio_stream.c
     audio/wake_word.c
     audio/vad.c
@@ -27,4 +27,14 @@ target_link_libraries(kate_core
 
 target_include_directories(kate_core PRIVATE ${CMAKE_SOURCE_DIR})
 
-target_compile_options(kate_core PRIVATE -O3 -ffast-math -Wall)
+target_compile_options(kate_core PRIVATE
+    -O2
+    -ffast-math
+    -Wall
+    -fPIC
+)
+
+# 16KB page alignment — required for Android 14+ installation
+target_link_options(kate_core PRIVATE
+    -Wl,-z,max-page-size=16384
+)
