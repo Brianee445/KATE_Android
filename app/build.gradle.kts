@@ -52,6 +52,11 @@ android {
     buildFeatures {
         compose = true
     }
+       packaging {
+       jniLibs {
+            userLegacyPackaging = true
+    }
+)  
 
     buildTypes {
         release {
