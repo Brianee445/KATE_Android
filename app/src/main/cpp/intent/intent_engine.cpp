@@ -300,3 +300,161 @@ void IntentEngine::loadEntityPatterns() {
 }
 
 } // namespace kate
+
+// app/src/main/cpp/intent/intent_engine.cpp - Add new intents
+
+// In the ruleBasedClassify method, add these cases:
+
+// Torch/Flashlight
+else if (lower.find("torch") != std::string::npos || 
+         lower.find("flashlight") != std::string::npos ||
+         lower.find("flash") != std::string::npos ||
+         lower.find("light") != std::string::npos) {
+    
+    result.intent = "toggle_torch";
+    result.confidence = 0.85f;
+    result.action = "toggle_torch";
+    
+    // Check if turning on or off
+    if (lower.find("on") != std::string::npos || 
+        lower.find("enable") != std::string::npos) {
+        result.entities.push_back({"state", "on"});
+        result.response = "Turning torch on.";
+    } else if (lower.find("off") != std::string::npos || 
+               lower.find("disable") != std::string::npos) {
+        result.entities.push_back({"state", "off"});
+        result.response = "Turning torch off.";
+    } else {
+        result.response = "Toggling torch.";
+    }
+}
+
+// Make Call
+else if (lower.find("call") != std::string::npos || 
+         lower.find("dial") != std::string::npos) {
+    
+    result.intent = "make_call";
+    result.confidence = 0.80f;
+    result.action = "make_call";
+    
+    // Extract phone number
+    std::regex numberRegex(R"(\d{10,14})");
+    std::smatch match;
+    if (std::regex_search(text, match, numberRegex)) {
+        result.target = match.str();
+        result.entities.push_back({"number", match.str()});
+        result.response = "Calling " + match.str() + ".";
+    } else {
+        result.response = "Please specify a phone number to call.";
+        result.confidence = 0.4f;
+    }
+}
+
+// Bluetooth
+else if (lower.find("bluetooth") != std::string::npos) {
+    result.intent = "toggle_bluetooth";
+    result.confidence = 0.85f;
+    result.action = "toggle_bluetooth";
+    
+    if (lower.find("on") != std::string::npos || 
+        lower.find("enable") != std::string::npos) {
+        result.entities.push_back({"state", "on"});
+        result.response = "Turning Bluetooth on.";
+    } else if (lower.find("off") != std::string::npos || 
+               lower.find("disable") != std::string::npos) {
+        result.entities.push_back({"state", "off"});
+        result.response = "Turning Bluetooth off.";
+    } else {
+        result.response = "Toggling Bluetooth.";
+    }
+}
+
+// Wi-Fi
+else if (lower.find("wifi") != std::string::npos || 
+         lower.find("wi-fi") != std::string::npos) {
+    result.intent = "toggle_wifi";
+    result.confidence = 0.85f;
+    result.action = "toggle_wifi";
+    
+    if (lower.find("on") != std::string::npos || 
+        lower.find("enable") != std::string::npos) {
+        result.entities.push_back({"state", "on"});
+        result.response = "Turning Wi-Fi on.";
+    } else if (lower.find("off") != std::string::npos || 
+               lower.find("disable") != std::string::npos) {
+        result.entities.push_back({"state", "off"});
+        result.response = "Turning Wi-Fi off.";
+    } else {
+        result.response = "Toggling Wi-Fi.";
+    }
+}
+
+// Volume
+else if (lower.find("volume") != std::string::npos) {
+    result.intent = "set_volume";
+    result.confidence = 0.80f;
+    result.action = "set_volume";
+    
+    // Extract number
+    std::regex numberRegex(R"(\d+)");
+    std::smatch match;
+    if (std::regex_search(text, match, numberRegex)) {
+        result.target = match.str();
+        result.entities.push_back({"level", match.str()});
+        result.response = "Setting volume to " + match.str() + ".";
+    } else if (lower.find("up") != std::string::npos || 
+               lower.find("increase") != std::string::npos) {
+        result.entities.push_back({"direction", "up"});
+        result.response = "Increasing volume.";
+    } else if (lower.find("down") != std::string::npos || 
+               lower.find("decrease") != std::string::npos) {
+        result.entities.push_back({"direction", "down"});
+        result.response = "Decreasing volume.";
+    } else if (lower.find("mute") != std::string::npos) {
+        result.entities.push_back({"state", "mute"});
+        result.response = "Muting volume.";
+    } else {
+        result.response = "Please specify volume level.";
+        result.confidence = 0.4f;
+    }
+}
+
+// Airplane Mode
+else if (lower.find("airplane") != std::string::npos || 
+         lower.find("flight") != std::string::npos) {
+    result.intent = "toggle_airplane";
+    result.confidence = 0.85f;
+    result.action = "toggle_airplane";
+    
+    if (lower.find("on") != std::string::npos || 
+        lower.find("enable") != std::string::npos) {
+        result.entities.push_back({"state", "on"});
+        result.response = "Turning airplane mode on.";
+    } else if (lower.find("off") != std::string::npos || 
+               lower.find("disable") != std::string::npos) {
+        result.entities.push_back({"state", "off"});
+        result.response = "Turning airplane mode off.";
+    } else {
+        result.response = "Toggling airplane mode.";
+    }
+}
+
+// Do Not Disturb
+else if (lower.find("do not disturb") != std::string::npos || 
+         lower.find("dnd") != std::string::npos) {
+    result.intent = "toggle_dnd";
+    result.confidence = 0.85f;
+    result.action = "toggle_dnd";
+    
+    if (lower.find("on") != std::string::npos || 
+        lower.find("enable") != std::string::npos) {
+        result.entities.push_back({"state", "on"});
+        result.response = "Turning Do Not Disturb on.";
+    } else if (lower.find("off") != std::string::npos || 
+               lower.find("disable") != std::string::npos) {
+        result.entities.push_back({"state", "off"});
+        result.response = "Turning Do Not Disturb off.";
+    } else {
+        result.response = "Toggling Do Not Disturb.";
+    }
+}
