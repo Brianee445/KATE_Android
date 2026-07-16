@@ -28,6 +28,23 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      # ==================== GENERATE AVATARS ====================
+      - name: Generate Kate Avatars
+        run: |
+          echo "🎨 Generating Kate avatars from source..."
+          
+          # Install Pillow for image processing
+          pip install pillow
+          
+          # Run the avatar generator
+          python scripts/generate_kate_avatars.py
+          
+          echo "✅ Avatars generated successfully!"
+          
+          # Show what was generated
+          echo "📁 Generated avatar files:"
+          find app/src/main/res -name "kate_avatar_*.png" | head -10
+
       # ==================== CACHE ====================
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
@@ -71,17 +88,6 @@ jobs:
           else
             echo "✅ Vosk model already cached"
           fi
-          echo "📁 Vosk model size: $(du -sh app/src/main/assets/vosk-model | cut -f1)"
-
-      # ==================== DOWNLOAD THIRD-PARTY LIBS ====================
-      - name: Download third-party libraries (if script exists)
-        run: |
-          if [ -f "scripts/download_third_party.sh" ]; then
-            chmod +x scripts/download_third_party.sh
-            ./scripts/download_third_party.sh || echo "⚠️ Third-party script failed, continuing..."
-          else
-            echo "ℹ️ No third-party download script found"
-          fi
 
       # ==================== LINT ====================
       - name: Run lint
@@ -105,58 +111,28 @@ jobs:
           name: test-reports
           path: app/build/reports/tests/
 
-      # ==================== KOTLIN COMPILER CHECK ====================
-      - name: Run Kotlin compiler checks
-        run: ./gradlew compileDebugKotlin
-
       # ==================== BUILD DEBUG APK ====================
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
-      # ==================== VERIFY NATIVE LIBRARIES ====================
-      - name: Verify native library packaging
+      # ==================== VERIFY ASSETS ====================
+      - name: Verify avatar generation
         run: |
+          echo "🔍 Verifying avatar assets in APK..."
           APK=app/build/outputs/apk/debug/app-debug.apk
           if [ -f "$APK" ]; then
-            echo "✅ APK found: $APK"
-            echo "📏 APK size: $(du -h $APK | cut -f1)"
-            
-            echo "=== LIB FOLDERS ==="
-            unzip -l $APK | grep "lib/" || echo "No lib folders found"
-            
-            echo "=== .SO FILE INFO ==="
-            unzip -l $APK | grep "\.so" || echo "No .so files found"
-          else
-            echo "❌ APK not found at $APK"
-            exit 1
+            echo "✅ APK found"
+            echo "📊 Avatar files in APK:"
+            unzip -l $APK | grep "kate_avatar" || echo "⚠️ No avatar files found!"
           fi
 
-      # ==================== VERIFY VOSK IN APK ====================
-      - name: Verify Vosk model in APK
-        run: |
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          echo "=== CHECKING FOR VOSK MODEL ==="
-          unzip -l $APK | grep "assets/vosk-model" || echo "⚠️ Vosk model not in APK"
-          # Count files in model
-          FILES_COUNT=$(unzip -l $APK | grep "assets/vosk-model/" | wc -l)
-          echo "📊 Vosk model files in APK: $FILES_COUNT"
-
-      # ==================== UPLOAD ARTIFACTS ====================
+      # ==================== UPLOAD APK ====================
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: kate-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 7
-
-      - name: Upload build logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            app/build/outputs/logs/
-            ~/.gradle/daemon/*/daemon-*.out.log
 
       # ==================== BUILD SUMMARY ====================
       - name: Build Summary
@@ -166,6 +142,14 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Avatars
+          if [ -d "app/src/main/res/drawable-xxhdpi" ]; then
+            COUNT=$(find app/src/main/res -name "kate_avatar_*.png" | wc -l)
+            echo "| Avatars | ✅ Generated ($COUNT files) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Avatars | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
           
           # Lint
           if [ -f "app/build/reports/lint-results-debug.html" ]; then
@@ -188,12 +172,4 @@ jobs:
             echo "| Debug APK | ✅ Built ($SIZE) |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Debug APK | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          # Vosk model
-          if [ -d "app/src/main/assets/vosk-model" ]; then
-            MODEL_SIZE=$(du -sh app/src/main/assets/vosk-model | cut -f1)
-            echo "| Vosk Model | ✅ Included ($MODEL_SIZE) |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Vosk Model | ⚠️ Not found |" >> $GITHUB_STEP_SUMMARY
           fi
