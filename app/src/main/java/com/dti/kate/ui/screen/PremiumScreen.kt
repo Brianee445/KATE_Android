@@ -223,6 +223,23 @@ fun PremiumScreen(
                             modifier = Modifier.weight(1f),
                         )
                     }
+
+                    // Update the providers list in PremiumScreen.kt
+
+val providers = listOf(
+    PaymentProvider(
+        id = "flutterwave",
+        icon = R.drawable.ic_flutterwave,
+        name = "Flutterwave",
+        description = "African payments",
+    ),
+    PaymentProvider(
+        id = "stripe",
+        icon = R.drawable.ic_stripe,
+        name = "Stripe",
+        description = "International cards",
+    ),
+)
                 }
             }
             
