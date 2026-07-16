@@ -128,4 +128,7 @@ endif()
 add_custom_command(TARGET kate_engine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_SOURCE_DIR}/third_party/vosk/lib/${ARCH}/libvosk.so
-        ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libvosk.so
+        ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libvosk.so    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_SOURCE_DIR}/third_party/tflite/lib/${ARCH}/libtensorflowlite_c.so
+        ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libtensorflowlite_c.so
+)
