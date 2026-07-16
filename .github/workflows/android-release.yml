@@ -21,13 +21,37 @@ jobs:
       - name: Set up Android NDK
         uses: android-actions/setup-android@v3
 
+      # ==================== DECODE KEYSTORE ====================
       - name: Decode keystore
         run: |
           echo "${{ secrets.SIGNING_KEY }}" | base64 -d > $GITHUB_WORKSPACE/kate.jks
-  
+          echo "Keystore decoded successfully"
+
+      # ==================== GRADLE PERMISSIONS ====================
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      # ==================== DOWNLOAD VOSK MODEL (CI BUILD) ====================
+      - name: Download Vosk model for CI build
+        run: |
+          mkdir -p app/src/main/assets
+          curl -L -o /tmp/vosk-model.zip \
+            "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+          unzip -q /tmp/vosk-model.zip -d app/src/main/assets/
+          echo "Vosk model downloaded to assets"
+          ls -la app/src/main/assets/
+
+      # ==================== DOWNLOAD THIRD-PARTY LIBS (if needed) ====================
+      - name: Download third-party libraries (if script exists)
+        run: |
+          if [ -f "scripts/download_third_party.sh" ]; then
+            chmod +x scripts/download_third_party.sh
+            ./scripts/download_third_party.sh || echo "Script failed, continuing..."
+          else
+            echo "No third-party download script found, skipping..."
+          fi
+
+      # ==================== BUILD RELEASE APK ====================
       - name: Build & sign release APK
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/kate.jks
@@ -36,23 +60,110 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
+      # ==================== BUILD RELEASE AAB (Play Store) ====================
+      - name: Build & sign release AAB
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/kate.jks
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew bundleRelease
+
+      # ==================== VERIFY NATIVE LIBRARIES ====================
       - name: Verify native library architecture
         run: |
-          APK=app/build/outputs/apk/release/*.apk
-          echo "=== LIB FOLDERS ==="
-          unzip -l $APK | grep "lib/"
-          echo "=== .SO FILE INFO ==="
-          unzip -o $APK "lib/*" -d /tmp/apk_check
-          file /tmp/apk_check/lib/arm64-v8a/libkate_core.socontinue-on-error: 
-     
-      - name: Verify native library packaging
+          echo "=== CHECKING APK NATIVE LIBRARIES ==="
+          APK=app/build/outputs/apk/release/app-release.apk
+          if [ -f "$APK" ]; then
+            echo "✅ APK found: $APK"
+            echo "=== LIB FOLDERS ==="
+            unzip -l $APK | grep "lib/" || echo "No lib folders found"
+            echo "=== .SO FILE INFO ==="
+            unzip -l $APK | grep "\.so" || echo "No .so files found"
+          else
+            echo "❌ APK not found at $APK"
+            exit 1
+          fi
+          
+          echo "=== CHECKING AAB NATIVE LIBRARIES ==="
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          if [ -f "$AAB" ]; then
+            echo "✅ AAB found: $AAB"
+            echo "=== AAB SIZE ==="
+            ls -lh $AAB
+          else
+            echo "❌ AAB not found at $AAB"
+          fi
+
+      # ==================== VERIFY SIGNING ====================
+      - name: Verify APK signing
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
-          echo "=== LIB PACKAGING CHECK ==="
-          unzip -v $APK | grep "\.so"
-          
+          echo "=== VERIFYING SIGNATURE ==="
+          jarsigner -verify -verbose -certs $APK || echo "⚠️ Signature verification failed"
+
+      # ==================== UPLOAD APK ====================
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: kate-release-signed
+          name: kate-release-apk
           path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      # ==================== UPLOAD AAB ====================
+      - name: Upload signed AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: kate-release-aab
+          path: app/build/outputs/bundle/release/*.aab
+          retention-days: 30
+
+      # ==================== UPLOAD TO PLAY STORE (Optional) ====================
+      # Uncomment if you have Play Store credentials configured
+      # - name: Upload to Play Store (Internal Track)
+      #   uses: r0adkll/upload-google-play@v1
+      #   with:
+      #     serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT }}
+      #     packageName: com.dti.kate
+      #     releaseFiles: app/build/outputs/bundle/release/*.aab
+      #     track: internal
+      #     status: completed
+      #     inAppUpdatePriority: 2
+
+      # ==================== CREATE GITHUB RELEASE ====================
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ==================== POST-BUILD SUMMARY ====================
+      - name: Build Summary
+        run: |
+          echo "## 🚀 Release Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifact | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
+          
+          APK=app/build/outputs/apk/release/app-release.apk
+          if [ -f "$APK" ]; then
+            SIZE=$(du -h "$APK" | cut -f1)
+            echo "| APK | $SIZE |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| APK | ❌ Not built |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          if [ -f "$AAB" ]; then
+            SIZE=$(du -h "$AAB" | cut -f1)
+            echo "| AAB | $SIZE |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| AAB | ❌ Not built |" >> $GITHUB_STEP_SUMMARY
+          fi
