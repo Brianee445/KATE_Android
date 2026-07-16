@@ -21,6 +21,26 @@ jobs:
       - name: Set up Android NDK
         uses: android-actions/setup-android@v3
 
+# ==================== DOWNLOAD THIRD-PARTY LIBS ====================
+      - name: Download third-party libraries
+        run: |
+          if [ -f "scripts/download_third_party.sh" ]; then
+            chmod +x scripts/download_third_party.sh
+            ./scripts/download_third_party.sh
+          else
+            echo "⚠️ Download script not found, using manual download..."
+            
+            # Manual download as fallback
+            mkdir -p app/src/main/cpp/third_party/vosk/lib/arm64-v8a
+            mkdir -p app/src/main/cpp/third_party/vosk/lib/armeabi-v7a
+            
+            curl -L -o /tmp/vosk.zip "https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-android-0.3.45.zip"
+            unzip -q /tmp/vosk.zip -d /tmp/vosk/
+            cp /tmp/vosk/lib/android/arm64-v8a/libvosk.so app/src/main/cpp/third_party/vosk/lib/arm64-v8a/
+            cp /tmp/vosk/lib/android/armeabi-v7a/libvosk.so app/src/main/cpp/third_party/vosk/lib/armeabi-v7a/
+            
+            echo "✅ Vosk libraries downloaded"
+          fi
       # ==================== GENERATE AVATARS ====================
       - name: Generate Kate Avatars
         run: |
