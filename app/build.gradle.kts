@@ -10,10 +10,7 @@ plugins {
     alias(libs.plugins.kotlin.compose) // required on Kotlin 2.0+ whenever compose = true
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.kotlin.kapt) // was: kotlin("kapt") — your catalog already
-                                     // declares this alias pinned to the same
-                                     // kotlin version (2.0.21), so use it directly
-                                     // instead of the version-less shorthand.
+    alias(libs.plugins.kotlin.kapt)
 }
 
 android {
@@ -231,6 +228,7 @@ dependencies {
 
     // ==================== IMAGE LOADING ====================
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp) // Coil 3 needs this explicitly for network images
 
     // ==================== ACCOMPANIST ====================
     implementation(libs.accompanist.permissions)
