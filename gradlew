@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # ============================================================================
-# Kate Assistant - Gradle Wrapper
+# Kate Assistant - Gradle Wrapper (Fixed)
 # ============================================================================
 
 # Source this script to avoid problems with CDPATH
@@ -12,10 +12,12 @@ cd "$(dirname "$0")" || exit
 APP_HOME="$(pwd)"
 
 # ============================================================================
-# KATE ENHANCEMENTS - MEMORY & ENCODING
+# KATE ENHANCEMENTS - MEMORY & ENCODING (FIXED)
 # ============================================================================
-# Default JVM options - Increased for large builds (Vosk + TFLite)
-DEFAULT_JVM_OPTS='"-Dfile.encoding=UTF-8" "-Xmx4096m" "-Xms512m" "-XX:MaxMetaspaceSize=512m" "-XX:+HeapDumpOnOutOfMemoryError"'
+# Default JVM options - Increased for large builds
+# NOTE: No quotes around the options - they are passed as separate arguments
+
+DEFAULT_JVM_OPTS="-Dfile.encoding=UTF-8 -Xmx4096m -Xms512m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError"
 
 # Enable Gradle daemon and cache for faster builds
 export GRADLE_OPTS="$GRADLE_OPTS -Dorg.gradle.daemon=true -Dorg.gradle.caching=true -Dorg.gradle.parallel=true"
@@ -46,7 +48,7 @@ echo "Encoding: UTF-8"
 echo "========================================"
 echo ""
 
-# Execute Gradle
+# Execute Gradle - FIXED: Properly split JVM options
 exec "$JAVA" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS \
     -Dorg.gradle.appname="$APP_BASE_NAME" \
     -classpath "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" \
