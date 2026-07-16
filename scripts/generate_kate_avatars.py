@@ -2,7 +2,7 @@
 """
 Kate Avatar Generator - One Source to Rule Them All
 ====================================================
-Place your source avatar at: app/src/main/res/source/kate_avatar_source.png
+Place your source avatar at: app/src/main/res/drawable/kate_avatar_source.png
 Run this script: python scripts/generate_kate_avatars.py
 
 It will generate:
@@ -275,7 +275,7 @@ def main():
     # Find project root
     script_dir = Path(__file__).parent.absolute()
     project_root = script_dir.parent
-    source_dir = project_root / "app" / "src" / "main" / "res" / "source"
+    source_dir = project_root / "app" / "src" / "main" / "res" / "drawable"
     output_dir = project_root / "app" / "src" / "main" / "res"
     
     # Source avatar path
