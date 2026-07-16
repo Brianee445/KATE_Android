@@ -7,6 +7,7 @@ import java.util.zip.ZipFile
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose) // required on Kotlin 2.0+ whenever compose = true
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.kapt) // was: kotlin("kapt") — your catalog already
@@ -80,10 +81,10 @@ android {
         buildConfig = true
     }
 
-    // ==================== COMPOSE ====================
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
-    }
+    // NOTE: composeOptions { kotlinCompilerExtensionVersion = ... } removed.
+    // On Kotlin 2.0+, the org.jetbrains.kotlin.plugin.compose plugin (applied
+    // above) wires the correct Compose compiler version automatically — this
+    // block is what triggered "Compose Compiler Gradle plugin is required".
 
     // ==================== COMPILE OPTIONS ====================
     compileOptions {
