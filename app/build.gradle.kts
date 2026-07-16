@@ -1,5 +1,9 @@
 // app/build.gradle.kts
 
+import java.io.FileOutputStream
+import java.net.URL
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -290,7 +294,7 @@ abstract class DownloadVoskModelTask : DefaultTask() {
         }
         
         println("📦 Extracting Vosk model...")
-        java.util.zip.ZipFile(zipFile).use { zip ->
+        ZipFile(zipFile).use { zip ->
             zip.entries().asSequence().forEach { entry ->
                 if (!entry.isDirectory) {
                     val targetFile = File(destDir, entry.name)
