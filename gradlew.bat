@@ -33,8 +33,21 @@ set APP_HOME=%DIRNAME%
 @rem Resolve any "." and ".." in APP_HOME to make it shorter.
 for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 
-@rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
-set DEFAULT_JVM_OPTS=-Dfile.encoding=UTF-8 "-Xmx64m" "-Xms64m"
+@rem ============================================================================
+@rem KATE ENHANCEMENTS - MEMORY & ENCODING
+@rem ============================================================================
+@rem Default JVM options - Increased for large builds (Vosk + TFLite)
+@rem -Xmx4096m: 4GB heap for large NDK builds
+@rem -Xms512m: Initial heap size
+@rem -XX:MaxMetaspaceSize=512m: For Kotlin/Java class metadata
+@rem -Dfile.encoding=UTF-8: Ensure UTF-8 encoding
+
+set DEFAULT_JVM_OPTS=-Dfile.encoding=UTF-8 -Xmx4096m -Xms512m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError
+
+@rem Enable Gradle daemon and cache for faster builds
+set GRADLE_OPTS=%GRADLE_OPTS% -Dorg.gradle.daemon=true -Dorg.gradle.caching=true -Dorg.gradle.parallel=true
+
+@rem ============================================================================
 
 @rem Find java.exe
 if defined JAVA_HOME goto findJavaFromJavaHome
@@ -70,8 +83,22 @@ goto fail
 
 set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
 
+@rem ============================================================================
+@rem KATE: Print build info for debugging
+@rem ============================================================================
+echo.
+echo ========================================
+echo   Kate Assistant - Gradle Build
+echo ========================================
+echo.
+echo Java: %JAVA_EXE%
+echo Memory: 4GB Heap
+echo Encoding: UTF-8
+echo Gradle: %GRADLE_VERSION%
+echo ========================================
+echo.
 
-@rem Execute Gradle
+@rem Execute Gradle with all options
 "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %*
 
 :end
