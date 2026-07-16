@@ -26,7 +26,6 @@ if "%OS%"=="Windows_NT" setlocal
 
 set DIRNAME=%~dp0
 if "%DIRNAME%"=="" set DIRNAME=.
-@rem This is normally unused
 set APP_BASE_NAME=%~n0
 set APP_HOME=%DIRNAME%
 
@@ -34,13 +33,10 @@ set APP_HOME=%DIRNAME%
 for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 
 @rem ============================================================================
-@rem KATE ENHANCEMENTS - MEMORY & ENCODING
+@rem KATE ENHANCEMENTS - MEMORY & ENCODING (FIXED)
 @rem ============================================================================
-@rem Default JVM options - Increased for large builds (Vosk + TFLite)
-@rem -Xmx4096m: 4GB heap for large NDK builds
-@rem -Xms512m: Initial heap size
-@rem -XX:MaxMetaspaceSize=512m: For Kotlin/Java class metadata
-@rem -Dfile.encoding=UTF-8: Ensure UTF-8 encoding
+@rem Default JVM options - NO QUOTES around the whole string
+@rem Each option is separate so Java can parse them correctly
 
 set DEFAULT_JVM_OPTS=-Dfile.encoding=UTF-8 -Xmx4096m -Xms512m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError
 
@@ -94,11 +90,10 @@ echo.
 echo Java: %JAVA_EXE%
 echo Memory: 4GB Heap
 echo Encoding: UTF-8
-echo Gradle: %GRADLE_VERSION%
 echo ========================================
 echo.
 
-@rem Execute Gradle with all options
+@rem Execute Gradle - FIXED: No quotes around JVM options
 "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %*
 
 :end
