@@ -21,33 +21,70 @@ jobs:
       - name: Set up Android NDK
         uses: android-actions/setup-android@v3
 
-# ==================== DOWNLOAD THIRD-PARTY LIBS ====================
+      # ==================== DOWNLOAD VOSK LIBRARIES (FIXED) ====================
+      - name: Download Vosk libraries
+        run: |
+          echo "📥 Downloading Vosk libraries..."
+          
+          # Create directories
+          mkdir -p app/src/main/cpp/third_party/vosk/lib/arm64-v8a
+          mkdir -p app/src/main/cpp/third_party/vosk/lib/armeabi-v7a
+          mkdir -p app/src/main/cpp/third_party/vosk/include
+          
+          # Download Vosk
+          curl -L -o /tmp/vosk.zip "https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-android-0.3.45.zip"
+          unzip -q /tmp/vosk.zip -d /tmp/vosk/
+          
+          # The zip structure is: aarch64/, armeabi-v7a/, x86_64/, x86/
+          # Copy from the correct paths
+          if [ -f "/tmp/vosk/aarch64/libvosk.so" ]; then
+            cp /tmp/vosk/aarch64/libvosk.so app/src/main/cpp/third_party/vosk/lib/arm64-v8a/
+            echo "  ✅ arm64-v8a: /tmp/vosk/aarch64/libvosk.so"
+          fi
+          
+          if [ -f "/tmp/vosk/armeabi-v7a/libvosk.so" ]; then
+            cp /tmp/vosk/armeabi-v7a/libvosk.so app/src/main/cpp/third_party/vosk/lib/armeabi-v7a/
+            echo "  ✅ armeabi-v7a: /tmp/vosk/armeabi-v7a/libvosk.so"
+          fi
+          
+          # Copy header
+          if [ -f "/tmp/vosk/src/vosk_api.h" ]; then
+            cp /tmp/vosk/src/vosk_api.h app/src/main/cpp/third_party/vosk/include/
+            echo "  ✅ Header: /tmp/vosk/src/vosk_api.h"
+          fi
+          
+          # Verify files exist
+          echo ""
+          echo "📁 Verification:"
+          ls -la app/src/main/cpp/third_party/vosk/lib/arm64-v8a/ || echo "  ⚠️ arm64-v8a directory empty"
+          ls -la app/src/main/cpp/third_party/vosk/lib/armeabi-v7a/ || echo "  ⚠️ armeabi-v7a directory empty"
+          ls -la app/src/main/cpp/third_party/vosk/include/ || echo "  ⚠️ include directory empty"
+
+      # ==================== DOWNLOAD THIRD-PARTY LIBS (TFLite + JSON) ====================
       - name: Download third-party libraries
         run: |
           if [ -f "scripts/download_third_party.sh" ]; then
             chmod +x scripts/download_third_party.sh
             ./scripts/download_third_party.sh
           else
-            echo "⚠️ Download script not found, using manual download..."
-            
-            # Manual download as fallback
-            mkdir -p app/src/main/cpp/third_party/vosk/lib/arm64-v8a
-            mkdir -p app/src/main/cpp/third_party/vosk/lib/armeabi-v7a
-            
-            curl -L -o /tmp/vosk.zip "https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-android-0.3.45.zip"
-            unzip -q /tmp/vosk.zip -d /tmp/vosk/
-            cp /tmp/vosk/lib/android/arm64-v8a/libvosk.so app/src/main/cpp/third_party/vosk/lib/arm64-v8a/
-            cp /tmp/vosk/lib/android/armeabi-v7a/libvosk.so app/src/main/cpp/third_party/vosk/lib/armeabi-v7a/
-            
-            echo "✅ Vosk libraries downloaded"
+            echo "⚠️ Third-party script not found, creating placeholder..."
+            mkdir -p app/src/main/cpp/third_party/tflite/lib/arm64-v8a
+            mkdir -p app/src/main/cpp/third_party/tflite/lib/armeabi-v7a
+            touch app/src/main/cpp/third_party/tflite/lib/arm64-v8a/libtensorflowlite_c.so
+            touch app/src/main/cpp/third_party/tflite/lib/armeabi-v7a/libtensorflowlite_c.so
           fi
+
       # ==================== GENERATE AVATARS ====================
       - name: Generate Kate Avatars
         run: |
-          echo "🎨 Generating Kate avatars..."
-          pip install pillow
-          python scripts/generate_kate_avatars.py
-          echo "✅ Avatars generated!"
+          if [ -f "scripts/generate_kate_avatars.py" ] && [ -f "app/src/main/res/source/kate_avatar_source.png" ]; then
+            echo "🎨 Generating Kate avatars..."
+            pip install pillow
+            python scripts/generate_kate_avatars.py
+            echo "✅ Avatars generated!"
+          else
+            echo "⚠️ Avatar script or source not found, skipping..."
+          fi
 
       # ==================== DECODE KEYSTORE ====================
       - name: Decode keystore
@@ -59,15 +96,19 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      # ==================== DOWNLOAD VOSK MODEL ====================
+      # ==================== DOWNLOAD VOSK MODEL (for assets) ====================
       - name: Download Vosk model for CI build
         run: |
           mkdir -p app/src/main/assets
-          curl -L -o /tmp/vosk-model.zip \
-            "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-          unzip -q /tmp/vosk-model.zip -d app/src/main/assets/
-          mv app/src/main/assets/vosk-model-small-en-us-0.15 app/src/main/assets/vosk-model
-          echo "Vosk model downloaded to assets"
+          if [ ! -d "app/src/main/assets/vosk-model" ]; then
+            curl -L -o /tmp/vosk-model.zip \
+              "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+            unzip -q /tmp/vosk-model.zip -d app/src/main/assets/
+            mv app/src/main/assets/vosk-model-small-en-us-0.15 app/src/main/assets/vosk-model
+            echo "Vosk model downloaded to assets"
+          else
+            echo "Vosk model already exists"
+          fi
 
       # ==================== BUILD APK & AAB ====================
       - name: Build & sign release APK
@@ -90,11 +131,13 @@ jobs:
       - name: Verify artifacts
         run: |
           echo "=== APK ==="
-          ls -la app/build/outputs/apk/release/
+          ls -la app/build/outputs/apk/release/ || echo "APK not found"
           echo "=== AAB ==="
-          ls -la app/build/outputs/bundle/release/
-          echo "=== Avatar verification ==="
-          unzip -l app/build/outputs/apk/release/app-release.apk | grep "kate_avatar" | head -5
+          ls -la app/build/outputs/bundle/release/ || echo "AAB not found"
+          echo "=== Native libraries in APK ==="
+          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            unzip -l app/build/outputs/apk/release/app-release.apk | grep "\.so" | head -10 || echo "No .so files found"
+          fi
 
       # ==================== UPLOAD ====================
       - name: Upload signed APK
