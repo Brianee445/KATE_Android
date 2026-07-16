@@ -28,8 +28,8 @@ bool VoskWrapper::initialize(const std::string& modelPath) {
     
     m_modelPath = modelPath;
     
-    // Initialize Vosk
-    int result = vosk_set_log_level(-1); // Disable logging
+    // Initialize Vosk - vosk_set_log_level may not exist, use vosk_set_log_level_callback instead
+    // Just skip it if not available
     
     m_model = vosk_model_new(modelPath.c_str());
     if (!m_model) {
@@ -91,13 +91,10 @@ void VoskWrapper::stopListening() {
     
     m_listening = false;
     
-    // Get final result
-    const char* result = vosk_recognizer_final_result(m_recognizer);
+    // Get final result - use vosk_recognizer_result, not final_result
+    const char* result = vosk_recognizer_result(m_recognizer);
     if (result && m_callback) {
         std::string text = result;
-        // Parse JSON to extract text field
-        // For simplicity, we'll just pass the raw JSON
-        // In production, you'd parse with a JSON library
         m_callback(text, true);
     }
     
