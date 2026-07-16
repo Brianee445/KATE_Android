@@ -123,4 +123,73 @@ std::string EntityExtractor::extractTextToType(const std::string& text) {
                             break;
                         }
                     }
-               
+                }
+                return textToType;
+            }
+        }
+    }
+    
+    return "";
+}
+
+std::string EntityExtractor::extractSearchQuery(const std::string& text) {
+    std::vector<std::string> triggers = {"search", "find", "look up", "google"};
+    
+    for (const auto& trigger : triggers) {
+        size_t pos = text.find(trigger);
+        if (pos != std::string::npos) {
+            size_t start = pos + trigger.length();
+            while (start < text.length() && text[start] == ' ') {
+                start++;
+            }
+            
+            if (start < text.length()) {
+                std::string query = text.substr(start);
+                // Check if it starts with "for" or "about"
+                std::string lowerQuery = query;
+                std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+                if (lowerQuery.find("for ") == 0) {
+                    query = query.substr(4);
+                } else if (lowerQuery.find("about ") == 0) {
+                    query = query.substr(6);
+                }
+                // Remove trailing phrases
+                for (const auto& phrase : {" please", " now", " quickly"}) {
+                    if (query.length() > strlen(phrase)) {
+                        std::string lowerQuery2 = query;
+                        std::transform(lowerQuery2.begin(), lowerQuery2.end(), lowerQuery2.begin(), ::tolower);
+                        size_t phrasePos = lowerQuery2.find(phrase);
+                        if (phrasePos != std::string::npos) {
+                            query = query.substr(0, phrasePos);
+                            break;
+                        }
+                    }
+                }
+                return query;
+            }
+        }
+    }
+    
+    return "";
+}
+
+std::string EntityExtractor::extractNumber(const std::string& text) {
+    std::regex numberPattern(R"(\b\d+\b)");
+    std::smatch match;
+    
+    if (std::regex_search(text, match, numberPattern)) {
+        return match.str();
+    }
+    
+    return "";
+}
+
+void EntityExtractor::buildPatterns() {
+    m_entityPatterns = {
+        {"app", {"open", "launch", "start"}},
+        {"text", {"type", "write", "enter"}},
+        {"query", {"search", "find", "look up"}},
+    };
+}
+
+} // namespace kate
