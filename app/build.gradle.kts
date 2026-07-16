@@ -5,7 +5,12 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
-    id("kotlin-kapt")
+    kotlin("kapt") // was: id("kotlin-kapt") — bare id has no version attached
+                    // anywhere, and every other plugin here uses alias(libs.plugins.x)
+                    // which carries its version from libs.versions.toml. kotlin("kapt")
+                    // resolves its version from the Kotlin Gradle Plugin already put on
+                    // the classpath by alias(libs.plugins.kotlin.android) above, so no
+                    // catalog entry is needed for it.
 }
 
 android {
