@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <!-- Bubble View -->
+    <FrameLayout
+        android:id="@+id/overlay_bubble"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:background="@drawable/overlay_bubble_background"
+        android:elevation="8dp">
+
+        <ImageView
+            android:id="@+id/kate_avatar"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:src="@drawable/kate_avatar_idle" />
+
+        <View
+            android:id="@+id/listening_indicator"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_gravity="bottom|end"
+            android:background="@drawable/overlay_indicator_dot"
+            android:visibility="gone" />
+
+    </FrameLayout>
+
+    <!-- Expanded View -->
+    <FrameLayout
+        android:id="@+id/overlay_expanded"
+        android:layout_width="320dp"
+        android:layout_height="400dp"
+        android:background="@drawable/overlay_expanded_background"
+        android:elevation="12dp"
+        android:visibility="gone">
+
+        <!-- Content will be populated programmatically -->
+        <include layout="@layout/overlay_expanded_content" />
+
+    </FrameLayout>
+
+</FrameLayout>
