@@ -34,12 +34,11 @@ dependencyResolutionManagement {
         }
     }
     
-    // Version catalogs are automatically loaded from gradle/libs.versions.toml
-    versionCatalogs {
-        create("libs") {
-            from(files("gradle/libs.versions.toml"))
-        }
-    }
+    // NOTE: no explicit versionCatalogs{} block needed here. Gradle 7.4+
+    // auto-detects gradle/libs.versions.toml and registers it as the "libs"
+    // catalog by itself. Explicitly calling from(files(...)) on top of that
+    // is a *second* from() call on the same catalog, which Gradle 8.6
+    // rejects with "you can only call the 'from' method a single time".
 }
 
 rootProject.name = "Kate"
