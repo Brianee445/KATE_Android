@@ -45,6 +45,11 @@ dependencyResolutionManagement {
 rootProject.name = "Kate"
 include(":app")
 
-// Enable preview features
-enableFeaturePreview("VERSION_CATALOGS")
-enableFeaturePreview("STABLE_CONFIGURATION_CACHE")
+// NOTE: enableFeaturePreview("VERSION_CATALOGS") and
+// enableFeaturePreview("STABLE_CONFIGURATION_CACHE") were removed.
+// Both features stabilized years ago (Gradle 7.x) and are no longer valid
+// preview-feature names on Gradle 8.6 — calling either throws
+// "There is no feature named ..." and fails the build.
+// Version catalogs work automatically from gradle/libs.versions.toml above,
+// and configuration cache is already enabled via
+// org.gradle.configuration-cache=true in gradle.properties.
