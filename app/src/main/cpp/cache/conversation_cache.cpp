@@ -1,6 +1,7 @@
 // app/src/main/cpp/cache/conversation_cache.cpp
 
 #include "conversation_cache.h"
+#include "../core/kate_engine.h"  // For ConversationRecord
 #include <android/log.h>
 #include <algorithm>
 #include <sstream>
@@ -30,7 +31,6 @@ bool ConversationCache::initialize(const std::string& dbPath) {
         return true;
     }
     
-    // Try to load from file
     if (!dbPath.empty()) {
         loadFromFile(dbPath);
     }
@@ -70,10 +70,13 @@ bool ConversationCache::store(const std::string& query, const std::string& respo
     m_cache[normalized] = entry;
     m_accessOrder.push(normalized);
     
-    // Trim if needed
     trim(m_maxSize);
     
     return true;
+}
+
+bool ConversationCache::storeConversation(const ConversationRecord& record) {
+    return store(record.query, record.response, record.intent, record.confidence);
 }
 
 std::string ConversationCache::getResponse(const std::string& query) {
@@ -90,17 +93,12 @@ std::string ConversationCache::getResponse(const std::string& query) {
         return it->second.response;
     }
     
-    // Try similarity search
     auto similar = findSimilar(query, 1);
     if (!similar.empty() && similar[0].confidence >= m_similarityThreshold) {
         return similar[0].response;
     }
     
     return "";
-}
-
-bool ConversationCache::storeConversation(const ConversationRecord& record) {
-    return store(record.query, record.response, record.intent, record.confidence);
 }
 
 void ConversationCache::clear() {
@@ -113,18 +111,15 @@ void ConversationCache::clear() {
 }
 
 void ConversationCache::trim(size_t maxSize) {
-    // Don't trim if within limit
     if (m_cache.size() <= maxSize) {
         return;
     }
     
-    // Remove oldest entries until under limit
     size_t toRemove = m_cache.size() - maxSize;
     for (size_t i = 0; i < toRemove && !m_accessOrder.empty(); i++) {
         std::string key = m_accessOrder.front();
         m_accessOrder.pop();
         
-        // Check if key still exists (might have been updated)
         auto it = m_cache.find(key);
         if (it != m_cache.end()) {
             m_cache.erase(it);
@@ -146,7 +141,6 @@ std::vector<CacheEntry> ConversationCache::findSimilar(const std::string& query,
         return results;
     }
     
-    // Calculate similarity for each entry
     std::vector<std::pair<float, CacheEntry>> scored;
     for (const auto& pair : m_cache) {
         float similarity = calculateSimilarity(normalized, pair.first);
@@ -156,13 +150,11 @@ std::vector<CacheEntry> ConversationCache::findSimilar(const std::string& query,
         }
     }
     
-    // Sort by similarity (descending)
     std::sort(scored.begin(), scored.end(),
         [](const auto& a, const auto& b) {
             return a.first > b.first;
         });
     
-    // Take top N
     int count = std::min(limit, static_cast<int>(scored.size()));
     for (int i = 0; i < count; i++) {
         results.push_back(scored[i].second);
@@ -173,11 +165,8 @@ std::vector<CacheEntry> ConversationCache::findSimilar(const std::string& query,
 
 std::string ConversationCache::normalizeQuery(const std::string& query) {
     std::string result = query;
-    
-    // Convert to lowercase
     std::transform(result.begin(), result.end(), result.begin(), ::tolower);
     
-    // Remove extra spaces
     std::stringstream ss(result);
     std::string word;
     std::string normalized;
@@ -196,7 +185,6 @@ float ConversationCache::calculateSimilarity(const std::string& a, const std::st
         return 0.0f;
     }
     
-    // Jaccard similarity on tokens
     auto tokensA = tokenize(a);
     auto tokensB = tokenize(b);
     
@@ -204,7 +192,6 @@ float ConversationCache::calculateSimilarity(const std::string& a, const std::st
         return 0.0f;
     }
     
-    // Count intersection
     std::unordered_map<std::string, int> freqA;
     for (const auto& token : tokensA) {
         freqA[token]++;
@@ -231,7 +218,6 @@ std::vector<std::string> ConversationCache::tokenize(const std::string& text) {
     std::string token;
     
     while (ss >> token) {
-        // Remove punctuation (simplified)
         token.erase(std::remove_if(token.begin(), token.end(),
             [](char c) { return std::ispunct(c); }),
             token.end());
