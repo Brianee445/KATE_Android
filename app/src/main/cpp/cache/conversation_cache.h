@@ -10,9 +10,11 @@
 #include <queue>
 #include <chrono>
 
-#include "../core/kate_engine.h"
-
 namespace kate {
+
+// Forward declaration of ConversationRecord
+// Full definition is in kate_engine.h
+struct ConversationRecord;
 
 struct CacheEntry {
     std::string query;
