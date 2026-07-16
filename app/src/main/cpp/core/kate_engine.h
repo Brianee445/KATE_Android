@@ -12,11 +12,14 @@
 
 #include "audio_pipeline.h"
 #include "../stt/speech_recognizer.h"
-#include "../intent/intent_engine.h"
+#include "../intent/intent_engine.h"  // This defines IntentResult
 #include "../tts/tts_synthesizer.h"
 #include "../cache/conversation_cache.h"
 
 namespace kate {
+
+// Forward declare ConversationRecord (defined in conversation_cache.h)
+struct ConversationRecord;
 
 // Engine state
 enum class EngineState {
@@ -29,27 +32,8 @@ enum class EngineState {
     ERROR
 };
 
-// Intent result
-struct IntentResult {
-    std::string intent;
-    std::string action;
-    std::string target;
-    float confidence;
-    std::vector<std::pair<std::string, std::string>> entities;
-    std::string response;
-    bool requires_payment;
-};
-
-// Conversation record
-struct ConversationRecord {
-    std::string query;
-    std::string response;
-    std::string intent;
-    float confidence;
-    bool used_cloud;
-    int64_t latency_ms;
-    int64_t timestamp;
-};
+// IntentResult is defined in intent_engine.h - don't redefine it here
+// Just use the one from intent_engine.h
 
 // Callback types
 using OnTranscriptionCallback = std::function<void(const std::string&, bool)>;
