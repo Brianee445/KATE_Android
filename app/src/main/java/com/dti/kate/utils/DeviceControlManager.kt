@@ -1,18 +1,21 @@
 package com.dti.kate.utils
 
+import android.Manifest
+import android.app.NotificationManager
+import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.telephony.TelephonyManager
-import android.widget.Toast
+import android.util.Log
 import androidx.core.content.ContextCompat
-import com.dti.kate.core.Logger
-import java.lang.reflect.Method
 
 class DeviceControlManager(private val context: Context) {
     
@@ -34,32 +37,27 @@ class DeviceControlManager(private val context: Context) {
     
     fun toggleTorch(): Boolean {
         return try {
-            // Get camera ID (usually "0" for back camera)
-            val cameraId = cameraManager.cameraIdList.firstOrNull()
-                ?: return false
-            
+            val cameraId = cameraManager.cameraIdList.firstOrNull() ?: return false
             currentCameraId = cameraId
             
-            // Check if torch is supported
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
             val torchAvailable = characteristics.get(
                 android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE
             ) ?: false
             
             if (!torchAvailable) {
-                Logger.w(TAG, "Torch not available on this device")
+                Log.w(TAG, "Torch not available on this device")
                 return false
             }
             
-            // Toggle torch
             torchState = !torchState
             cameraManager.setTorchMode(cameraId, torchState)
             
-            Logger.i(TAG, "Torch ${if (torchState) "ON" else "OFF"}")
+            Log.i(TAG, "Torch ${if (torchState) "ON" else "OFF"}")
             true
             
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to toggle torch: ${e.message}")
+            Log.e(TAG, "Failed to toggle torch: ${e.message}")
             false
         }
     }
@@ -77,50 +75,44 @@ class DeviceControlManager(private val context: Context) {
     
     fun makeCall(phoneNumber: String): Boolean {
         return try {
-            // Clean phone number
             val cleanNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
             
             if (cleanNumber.isEmpty()) {
-                Logger.w(TAG, "Invalid phone number")
+                Log.w(TAG, "Invalid phone number")
                 return false
             }
             
-            // Check if device can make calls
             val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 if (!telephonyManager.isVoiceCapable) {
-                    Logger.w(TAG, "Device not capable of making calls")
+                    Log.w(TAG, "Device not capable of making calls")
                     return false
                 }
             }
             
-            // Start call intent
             val intent = Intent(Intent.ACTION_CALL)
-            intent.data = android.net.Uri.parse("tel:$cleanNumber")
+            intent.data = Uri.parse("tel:$cleanNumber")
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             
-            // Check permission
             if (ContextCompat.checkSelfPermission(
                     context,
-                    android.Manifest.permission.CALL_PHONE
-                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    Manifest.permission.CALL_PHONE
+                ) == PackageManager.PERMISSION_GRANTED
             ) {
                 context.startActivity(intent)
-                Logger.i(TAG, "Calling $cleanNumber")
-                return true
+                Log.i(TAG, "Calling $cleanNumber")
+                true
             } else {
-                Logger.w(TAG, "CALL_PHONE permission not granted")
-                
-                // Fallback to dialer (ACTION_DIAL)
+                Log.w(TAG, "CALL_PHONE permission not granted, opening dialer")
                 val dialIntent = Intent(Intent.ACTION_DIAL)
-                dialIntent.data = android.net.Uri.parse("tel:$cleanNumber")
+                dialIntent.data = Uri.parse("tel:$cleanNumber")
                 dialIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 context.startActivity(dialIntent)
-                return true
+                true
             }
             
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to make call: ${e.message}")
+            Log.e(TAG, "Failed to make call: ${e.message}")
             false
         }
     }
@@ -131,27 +123,27 @@ class DeviceControlManager(private val context: Context) {
     
     fun toggleBluetooth(): Boolean {
         return try {
-            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
                 ?: return false
             
             if (bluetoothAdapter.isEnabled) {
                 bluetoothAdapter.disable()
-                Logger.i(TAG, "Bluetooth OFF")
+                Log.i(TAG, "Bluetooth OFF")
             } else {
                 bluetoothAdapter.enable()
-                Logger.i(TAG, "Bluetooth ON")
+                Log.i(TAG, "Bluetooth ON")
             }
             true
             
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to toggle Bluetooth: ${e.message}")
+            Log.e(TAG, "Failed to toggle Bluetooth: ${e.message}")
             false
         }
     }
     
     fun setBluetooth(on: Boolean): Boolean {
         return try {
-            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
                 ?: return false
             
             if (on && !bluetoothAdapter.isEnabled) {
@@ -162,15 +154,14 @@ class DeviceControlManager(private val context: Context) {
             true
             
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set Bluetooth: ${e.message}")
+            Log.e(TAG, "Failed to set Bluetooth: ${e.message}")
             false
         }
     }
     
     fun isBluetoothOn(): Boolean {
         return try {
-            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
-            bluetoothAdapter?.isEnabled ?: false
+            BluetoothAdapter.getDefaultAdapter()?.isEnabled ?: false
         } catch (e: Exception) {
             false
         }
@@ -182,17 +173,11 @@ class DeviceControlManager(private val context: Context) {
     
     fun toggleWifi(): Boolean {
         return try {
-            if (wifiManager.isWifiEnabled) {
-                wifiManager.isWifiEnabled = false
-                Logger.i(TAG, "Wi-Fi OFF")
-            } else {
-                wifiManager.isWifiEnabled = true
-                Logger.i(TAG, "Wi-Fi ON")
-            }
+            wifiManager.isWifiEnabled = !wifiManager.isWifiEnabled
+            Log.i(TAG, "Wi-Fi ${if (wifiManager.isWifiEnabled) "ON" else "OFF"}")
             true
-            
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to toggle Wi-Fi: ${e.message}")
+            Log.e(TAG, "Failed to toggle Wi-Fi: ${e.message}")
             false
         }
     }
@@ -200,10 +185,10 @@ class DeviceControlManager(private val context: Context) {
     fun setWifi(on: Boolean): Boolean {
         return try {
             wifiManager.isWifiEnabled = on
-            Logger.i(TAG, "Wi-Fi ${if (on) "ON" else "OFF"}")
+            Log.i(TAG, "Wi-Fi ${if (on) "ON" else "OFF"}")
             true
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set Wi-Fi: ${e.message}")
+            Log.e(TAG, "Failed to set Wi-Fi: ${e.message}")
             false
         }
     }
@@ -219,10 +204,10 @@ class DeviceControlManager(private val context: Context) {
             val maxVolume = audioManager.getStreamMaxVolume(streamType)
             val clampedLevel = level.coerceIn(0, maxVolume)
             audioManager.setStreamVolume(streamType, clampedLevel, AudioManager.FLAG_SHOW_UI)
-            Logger.i(TAG, "Volume set to $clampedLevel/$maxVolume")
+            Log.i(TAG, "Volume set to $clampedLevel/$maxVolume")
             true
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set volume: ${e.message}")
+            Log.e(TAG, "Failed to set volume: ${e.message}")
             false
         }
     }
@@ -236,7 +221,7 @@ class DeviceControlManager(private val context: Context) {
             )
             true
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to increase volume: ${e.message}")
+            Log.e(TAG, "Failed to increase volume: ${e.message}")
             false
         }
     }
@@ -250,7 +235,7 @@ class DeviceControlManager(private val context: Context) {
             )
             true
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to decrease volume: ${e.message}")
+            Log.e(TAG, "Failed to decrease volume: ${e.message}")
             false
         }
     }
@@ -258,10 +243,10 @@ class DeviceControlManager(private val context: Context) {
     fun muteVolume(streamType: Int = AudioManager.STREAM_MUSIC): Boolean {
         return try {
             audioManager.setStreamMute(streamType, true)
-            Logger.i(TAG, "Volume muted")
+            Log.i(TAG, "Volume muted")
             true
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to mute volume: ${e.message}")
+            Log.e(TAG, "Failed to mute volume: ${e.message}")
             false
         }
     }
@@ -269,10 +254,10 @@ class DeviceControlManager(private val context: Context) {
     fun unmuteVolume(streamType: Int = AudioManager.STREAM_MUSIC): Boolean {
         return try {
             audioManager.setStreamMute(streamType, false)
-            Logger.i(TAG, "Volume unmuted")
+            Log.i(TAG, "Volume unmuted")
             true
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to unmute volume: ${e.message}")
+            Log.e(TAG, "Failed to unmute volume: ${e.message}")
             false
         }
     }
@@ -285,10 +270,9 @@ class DeviceControlManager(private val context: Context) {
         return try {
             val clampedLevel = level.coerceIn(0, 255)
             
-            // Check if we can write settings
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 if (!Settings.System.canWrite(context)) {
-                    Logger.w(TAG, "Cannot write system settings - need permission")
+                    Log.w(TAG, "Cannot write system settings - need permission")
                     return false
                 }
             }
@@ -299,11 +283,11 @@ class DeviceControlManager(private val context: Context) {
                 clampedLevel
             )
             
-            Logger.i(TAG, "Brightness set to $clampedLevel/255")
+            Log.i(TAG, "Brightness set to $clampedLevel/255")
             true
             
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set brightness: ${e.message}")
+            Log.e(TAG, "Failed to set brightness: ${e.message}")
             false
         }
     }
@@ -338,16 +322,15 @@ class DeviceControlManager(private val context: Context) {
                 if (isEnabled) 0 else 1
             )
             
-            // Broadcast the change
             val intent = Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED)
             intent.putExtra("state", !isEnabled)
             context.sendBroadcast(intent)
             
-            Logger.i(TAG, "Airplane mode ${if (isEnabled) "OFF" else "ON"}")
+            Log.i(TAG, "Airplane mode ${if (isEnabled) "OFF" else "ON"}")
             true
             
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to toggle airplane mode: ${e.message}")
+            Log.e(TAG, "Failed to toggle airplane mode: ${e.message}")
             false
         }
     }
@@ -359,25 +342,26 @@ class DeviceControlManager(private val context: Context) {
     fun setDoNotDisturb(enabled: Boolean): Boolean {
         return try {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) 
-                as android.app.NotificationManager
+                as NotificationManager
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 if (enabled) {
                     notificationManager.setInterruptionFilter(
-                        android.app.NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                        NotificationManager.INTERRUPTION_FILTER_PRIORITY
                     )
                 } else {
                     notificationManager.setInterruptionFilter(
-                        android.app.NotificationManager.INTERRUPTION_FILTER_ALL
+                        NotificationManager.INTERRUPTION_FILTER_ALL
                     )
                 }
-                Logger.i(TAG, "Do Not Disturb ${if (enabled) "ON" else "OFF"}")
-                return true
+                Log.i(TAG, "Do Not Disturb ${if (enabled) "ON" else "OFF"}")
+                true
+            } else {
+                false
             }
-            false
             
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set DND: ${e.message}")
+            Log.e(TAG, "Failed to set DND: ${e.message}")
             false
         }
     }
@@ -390,14 +374,14 @@ class DeviceControlManager(private val context: Context) {
         return try {
             val intent = Intent(action)
             data?.let {
-                intent.data = android.net.Uri.parse(it)
+                intent.data = Uri.parse(it)
             }
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             context.startActivity(intent)
-            Logger.i(TAG, "Intent executed: $action")
+            Log.i(TAG, "Intent executed: $action")
             true
         } catch (e: Exception) {
-            Logger.e(TAG, "Failed to execute intent: ${e.message}")
+            Log.e(TAG, "Failed to execute intent: ${e.message}")
             false
         }
     }
