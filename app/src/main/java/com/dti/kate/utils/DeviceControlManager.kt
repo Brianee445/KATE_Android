@@ -18,19 +18,14 @@ import android.provider.ContactsContract
 import android.provider.Settings
 import android.telephony.SmsManager
 import android.telephony.TelephonyManager
-import android.widget.Toast
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.dti.kate.core.Logger
-import java.text.SimpleDateFormat
 import java.util.*
 
 class DeviceControlManager(private val context: Context) {
     
     companion object {
         private const val TAG = "DeviceControlManager"
-        
-        // Calendar constants
         private const val CALENDAR_ACCOUNT_NAME = "Kate Assistant"
         private const val CALENDAR_ACCOUNT_TYPE = "com.dti.kate"
     }
@@ -49,7 +44,7 @@ class DeviceControlManager(private val context: Context) {
     // ========================================================================
     
     fun makeCall(phoneNumber: String): Boolean {
-        try {
+        return try {
             val cleanNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
             
             if (cleanNumber.isEmpty()) {
@@ -76,19 +71,17 @@ class DeviceControlManager(private val context: Context) {
             ) {
                 context.startActivity(intent)
                 Logger.i(TAG, "Calling $cleanNumber")
-                return true
+                true
             } else {
-                // Fallback to dialer
                 val dialIntent = Intent(Intent.ACTION_DIAL)
                 dialIntent.data = Uri.parse("tel:$cleanNumber")
                 dialIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 context.startActivity(dialIntent)
-                return true
+                true
             }
-            
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to make call: ${e.message}")
-            return false
+            false
         }
     }
     
@@ -118,17 +111,15 @@ class DeviceControlManager(private val context: Context) {
                 val smsManager = SmsManager.getDefault()
                 smsManager.sendTextMessage(cleanNumber, null, message, null, null)
                 Logger.i(TAG, "Message sent to $cleanNumber")
-                return true
+                true
             } else {
-                // Fallback to SMS intent
                 val intent = Intent(Intent.ACTION_SENDTO)
                 intent.data = Uri.parse("smsto:$cleanNumber")
                 intent.putExtra("sms_body", message)
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 context.startActivity(intent)
-                return true
+                true
             }
-            
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to send message: ${e.message}")
             false
@@ -183,7 +174,6 @@ class DeviceControlManager(private val context: Context) {
                 }
             }
             ""
-            
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to get contact: ${e.message}")
             ""
@@ -196,7 +186,6 @@ class DeviceControlManager(private val context: Context) {
     
     fun addCalendarEvent(title: String, description: String, startTime: Long, endTime: Long): Boolean {
         return try {
-            // Check if we have a calendar
             val calendarId = getOrCreateCalendar()
             if (calendarId == -1L) {
                 Logger.w(TAG, "No calendar found")
@@ -216,20 +205,17 @@ class DeviceControlManager(private val context: Context) {
             val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
             
             if (uri != null) {
-                // Add reminder
                 val reminderValues = ContentValues().apply {
                     put(CalendarContract.Reminders.EVENT_ID, uri.lastPathSegment?.toLong() ?: 0)
                     put(CalendarContract.Reminders.MINUTES, 10)
                     put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
                 }
                 context.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminderValues)
-                
                 Logger.i(TAG, "Calendar event added: $title")
-                return true
+                true
+            } else {
+                false
             }
-            
-            false
-            
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to add calendar event: ${e.message}")
             false
@@ -258,7 +244,6 @@ class DeviceControlManager(private val context: Context) {
                 cursor?.close()
             }
             
-            // Create calendar if it doesn't exist
             val values = ContentValues().apply {
                 put(CalendarContract.Calendars.ACCOUNT_NAME, CALENDAR_ACCOUNT_NAME)
                 put(CalendarContract.Calendars.ACCOUNT_TYPE, CALENDAR_ACCOUNT_TYPE)
@@ -272,7 +257,6 @@ class DeviceControlManager(private val context: Context) {
             
             val newUri = contentResolver.insert(uri, values)
             newUri?.lastPathSegment?.toLong() ?: -1L
-            
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to get calendar: ${e.message}")
             -1L
@@ -285,8 +269,7 @@ class DeviceControlManager(private val context: Context) {
     
     fun setReminder(title: String, timeInMillis: Long): Boolean {
         return try {
-            // Use Calendar event as reminder
-            val endTime = timeInMillis + 30 * 60 * 1000 // 30 minutes duration
+            val endTime = timeInMillis + 30 * 60 * 1000
             addCalendarEvent("REMINDER: $title", "", timeInMillis, endTime)
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to set reminder: ${e.message}")
@@ -301,18 +284,16 @@ class DeviceControlManager(private val context: Context) {
     fun setTimer(minutes: Int): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                // Use system timer
                 val intent = Intent(AlarmClock.ACTION_SET_TIMER)
                 intent.putExtra(AlarmClock.EXTRA_LENGTH, minutes)
                 intent.putExtra(AlarmClock.EXTRA_SKIP_UI, true)
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 context.startActivity(intent)
                 Logger.i(TAG, "Timer set for $minutes minutes")
-                return true
+                true
             } else {
-                // Fallback: create a notification with countdown
                 createTimerNotification(minutes)
-                return true
+                true
             }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to set timer: ${e.message}")
@@ -350,7 +331,6 @@ class DeviceControlManager(private val context: Context) {
     
     fun createNote(title: String, content: String): Boolean {
         return try {
-            // Try Google Keep via intent
             val intent = Intent(Intent.ACTION_INSERT)
             intent.type = "vnd.android.cursor.item/vnd.google.note"
             intent.putExtra(Intent.EXTRA_TITLE, title)
@@ -360,13 +340,11 @@ class DeviceControlManager(private val context: Context) {
             if (intent.resolveActivity(context.packageManager) != null) {
                 context.startActivity(intent)
                 Logger.i(TAG, "Note created: $title")
-                return true
+                true
             } else {
-                // Fallback: save to a local file
                 saveNoteToFile(title, content)
-                return true
+                true
             }
-            
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to create note: ${e.message}")
             false
@@ -408,7 +386,6 @@ class DeviceControlManager(private val context: Context) {
             cameraManager.setTorchMode(cameraId, torchState)
             Logger.i(TAG, "Torch ${if (torchState) "ON" else "OFF"}")
             true
-            
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to toggle torch: ${e.message}")
             false
@@ -439,7 +416,6 @@ class DeviceControlManager(private val context: Context) {
                 Logger.i(TAG, "Bluetooth ON")
             }
             true
-            
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to toggle Bluetooth: ${e.message}")
             false
@@ -512,4 +488,24 @@ class DeviceControlManager(private val context: Context) {
     
     fun setDoNotDisturb(enabled: Boolean): Boolean {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CO
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (enabled) {
+                    notificationManager.setInterruptionFilter(
+                        NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                    )
+                } else {
+                    notificationManager.setInterruptionFilter(
+                        NotificationManager.INTERRUPTION_FILTER_ALL
+                    )
+                }
+                Logger.i(TAG, "DND ${if (enabled) "ON" else "OFF"}")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to set DND: ${e.message}")
+            false
+        }
+    }
+}
