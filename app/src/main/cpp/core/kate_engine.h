@@ -19,8 +19,7 @@
 namespace kate {
 
 // Forward declare ConversationRecord (defined in conversation_cache.h)
-struct ConversationRecord;
-
+#include "../cache/conversation_record.h"
 // Engine state
 enum class EngineState {
     IDLE,
