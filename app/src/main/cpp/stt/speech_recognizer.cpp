@@ -3,14 +3,12 @@
 #include "speech_recognizer.h"
 #include <android/log.h>
 #include <cstring>
-#include <nlohmann/json.hpp>
+#include <cstdlib>
 
 #define LOG_TAG "SpeechRecognizer"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-
-using json = nlohmann::json;
 
 namespace kate {
 
@@ -127,36 +125,47 @@ void SpeechRecognizer::processResult(const std::string& result, bool isFinal) {
 }
 
 void SpeechRecognizer::parseVoskResult(const std::string& jsonStr, std::string& text, float& confidence) {
-    // Parse without exceptions: -fno-exceptions is set for this build,
-    // so we use the non-throwing parse mode instead of try/catch.
-    auto data = json::parse(jsonStr, nullptr, false); // false = don't throw, returns discarded value on failure
+    // Manual lightweight parsing (no JSON library dependency for now -
+    // will be revisited when the new model ships its own JSON format).
+    // Vosk result strings look like: {"text": "hello world"} or
+    // {"partial": "hel"} or {"text": "...", "confidence": 0.87}
 
-    if (data.is_discarded()) {
-        // Fallback: try to extract text manually
-        size_t start = jsonStr.find("\"text\"");
-        if (start != std::string::npos) {
-            start = jsonStr.find("\"", start + 7) + 1;
-            size_t end = jsonStr.find("\"", start);
-            if (end != std::string::npos) {
-                text = jsonStr.substr(start, end - start);
+    auto extractStringField = [&](const std::string& fieldName) -> std::string {
+        std::string needle = "\"" + fieldName + "\"";
+        size_t start = jsonStr.find(needle);
+        if (start == std::string::npos) return "";
+
+        start = jsonStr.find("\"", start + needle.length());
+        if (start == std::string::npos) return "";
+        start += 1;
+
+        size_t end = jsonStr.find("\"", start);
+        if (end == std::string::npos) return "";
+
+        return jsonStr.substr(start, end - start);
+    };
+
+    std::string textField = extractStringField("text");
+    if (!textField.empty()) {
+        text = textField;
+    }
+
+    std::string partialField = extractStringField("partial");
+    if (!partialField.empty()) {
+        text = partialField;
+    }
+
+    size_t confPos = jsonStr.find("\"confidence\"");
+    if (confPos != std::string::npos) {
+        size_t colonPos = jsonStr.find(":", confPos);
+        if (colonPos != std::string::npos) {
+            const char* start = jsonStr.c_str() + colonPos + 1;
+            char* endPtr = nullptr;
+            float parsed = std::strtof(start, &endPtr);
+            if (endPtr != start) {
+                confidence = parsed;
             }
         }
-        return;
-    }
-
-    // Check for text field
-    if (data.contains("text")) {
-        text = data["text"].get<std::string>();
-    }
-
-    // Check for partial field
-    if (data.contains("partial")) {
-        text = data["partial"].get<std::string>();
-    }
-
-    // Check for confidence
-    if (data.contains("confidence")) {
-        confidence = data["confidence"].get<float>();
     }
 }
 
