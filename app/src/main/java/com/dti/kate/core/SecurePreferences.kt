@@ -57,9 +57,8 @@ class SecurePreferences(private val context: Context) {
     }
     
     // ==================== DEVICE ID ====================
-    
     fun getDeviceId(): String {
-        return prefs.getString(KEY_DEVICE_ID) ?: run {
+        return prefs.getString(KEY_DEVICE_ID, null) ?: run {
             val newId = UUID.randomUUID().toString()
             prefs.edit().putString(KEY_DEVICE_ID, newId).apply()
             newId
