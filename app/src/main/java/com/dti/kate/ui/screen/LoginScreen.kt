@@ -25,19 +25,12 @@ import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
 // ==================== VIEW MODEL ====================
-class AuthViewModel {
-    fun login(email: String, password: String, callback: (Boolean, String?) -> Unit) {
-        // Replace with real authentication logic
-        callback(true, null)
-    }
-    fun loginWithGoogle() { /* TODO */ }
-}
 
 // ==================== SCREEN ====================
 @Composable
 fun LoginScreen(
     navController: NavController,
-    viewModel: AuthViewModel = AuthViewModel(),
+    viewModel: AuthViewModel = AuthViewModel(LocalContext.current),
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
