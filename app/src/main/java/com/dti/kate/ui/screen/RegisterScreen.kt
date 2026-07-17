@@ -1,9 +1,16 @@
 package com.dti.kate.ui.screen
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -11,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -18,10 +26,19 @@ import com.dti.kate.R
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
+// Placeholder ViewModel — replace with real implementation
+class AuthViewModel {
+    fun register(email: String, password: String, fullName: String, callback: (Boolean, String?) -> Unit) {
+        // Simulate network call
+        callback(true, null)
+    }
+    fun registerWithGoogle() { /* TODO */ }
+}
+
 @Composable
 fun RegisterScreen(
     navController: NavController,
-    viewModel: AuthViewModel = viewModel(),
+    viewModel: AuthViewModel = AuthViewModel(),
 ) {
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -30,9 +47,9 @@ fun RegisterScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    
+
     val scrollState = rememberScrollState()
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -43,13 +60,13 @@ fun RegisterScreen(
     ) {
         // Header
         Image(
-            painter = painterResource(R.drawable.kate_logo_medium),
+            painter = painterResource(R.drawable.kate_avatar_idle), // fallback
             contentDescription = "Kate Assistant",
             modifier = Modifier
                 .size(64.dp)
                 .padding(bottom = 12.dp),
         )
-        
+
         Text(
             text = "Create Account",
             style = MaterialTheme.typography.headlineLarge.copy(
@@ -60,7 +77,7 @@ fun RegisterScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 8.dp),
         )
-        
+
         Text(
             text = "Start your journey with Kate",
             style = MaterialTheme.typography.bodyMedium.copy(
@@ -69,7 +86,7 @@ fun RegisterScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 32.dp),
         )
-        
+
         // Full Name
         KateTextField(
             value = fullName,
@@ -79,9 +96,9 @@ fun RegisterScreen(
             modifier = Modifier.fillMaxWidth(),
             isError = errorMessage != null,
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Email
         KateTextField(
             value = email,
@@ -92,9 +109,9 @@ fun RegisterScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             isError = errorMessage != null,
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Password
         KateTextField(
             value = password,
@@ -115,9 +132,9 @@ fun RegisterScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             isError = errorMessage != null,
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Confirm Password
         KateTextField(
             value = confirmPassword,
@@ -129,9 +146,9 @@ fun RegisterScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             isError = errorMessage != null,
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         // Register Button
         KateGradientButton(
             text = "Create Account",
@@ -155,9 +172,9 @@ fun RegisterScreen(
             isEnabled = !isLoading,
             size = KateButtonSize.Large,
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Divider
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -182,9 +199,9 @@ fun RegisterScreen(
                     .background(Divider)
             )
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Google Sign Up
         KateButton(
             text = "Continue with Google",
@@ -200,9 +217,9 @@ fun RegisterScreen(
                 )
             },
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Login link
         Row(
             modifier = Modifier.padding(top = 16.dp),
