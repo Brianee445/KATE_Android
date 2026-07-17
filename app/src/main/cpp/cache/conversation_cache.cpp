@@ -7,7 +7,7 @@
 #include <sstream>
 #include <cmath>
 #include <fstream>
-#include <regex>
+#include <cstdlib>
 
 #define LOG_TAG "ConversationCache"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -373,10 +373,13 @@ bool ConversationCache::loadFromFile(const std::string& path) {
         }
         std::string confStr = content.substr(confStart, confEnd - confStart);
         float confidence = 0.0f;
-        try {
-            confidence = std::stof(confStr);
-        } catch (...) {
-            confidence = 0.0f;
+        {
+            const char* cstr = confStr.c_str();
+            char* endPtr = nullptr;
+            float parsed = std::strtof(cstr, &endPtr);
+            if (endPtr != cstr) {
+                confidence = parsed;
+            }
         }
         
         // Find "access_count"
@@ -396,10 +399,13 @@ bool ConversationCache::loadFromFile(const std::string& path) {
         }
         std::string accessStr = content.substr(accessStart, accessEnd - accessStart);
         int accessCount = 0;
-        try {
-            accessCount = std::stoi(accessStr);
-        } catch (...) {
-            accessCount = 0;
+        {
+            const char* cstr = accessStr.c_str();
+            char* endPtr = nullptr;
+            long parsed = std::strtol(cstr, &endPtr, 10);
+            if (endPtr != cstr) {
+                accessCount = static_cast<int>(parsed);
+            }
         }
         
         // Store the entry
