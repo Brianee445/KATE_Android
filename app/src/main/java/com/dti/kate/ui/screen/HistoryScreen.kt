@@ -1,29 +1,83 @@
 package com.dti.kate.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
+// ==================== DATA CLASSES ====================
+data class HistoryConversation(
+    val id: String,
+    val query: String,
+    val response: String,
+    val intent: String,
+    val usedCloud: Boolean,
+    val timestamp: String,
+)
+
+// ==================== VIEW MODEL ====================
+class HistoryViewModel {
+    private val _conversations = mutableStateOf(
+        listOf(
+            HistoryConversation(
+                id = "1",
+                query = "Open Spotify",
+                response = "Opening Spotify...",
+                intent = "open_app",
+                usedCloud = false,
+                timestamp = "2025-01-15 14:30",
+            ),
+            HistoryConversation(
+                id = "2",
+                query = "What's the weather?",
+                response = "I can't check weather offline yet.",
+                intent = "search",
+                usedCloud = true,
+                timestamp = "2025-01-15 12:10",
+            ),
+        )
+    )
+    val conversations = _conversations
+
+    private val _isLoading = mutableStateOf(false)
+    val isLoading = _isLoading
+
+    private val _searchQuery = mutableStateOf("")
+    val searchQuery = _searchQuery
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun clearHistory() {
+        _conversations.value = emptyList()
+    }
+}
+
+// ==================== SCREEN ====================
 @Composable
 fun HistoryScreen(
     navController: NavController,
-    viewModel: HistoryViewModel = viewModel(),
+    viewModel: HistoryViewModel = HistoryViewModel(),
 ) {
-    val conversations by viewModel.conversations.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    
+    val conversations by viewModel.conversations
+    val isLoading by viewModel.isLoading
+    val searchQuery by viewModel.searchQuery
+
     var selectedFilter by remember { mutableStateOf<String?>(null) }
-    
+
     Scaffold(
         modifier = Modifier.background(Background),
         containerColor = Background,
@@ -65,18 +119,7 @@ fun HistoryScreen(
             )
         },
         bottomBar = {
-            KateBottomNavigation(
-                items = bottomNavItems,
-                currentRoute = "history",
-                onItemClick = { route ->
-                    when (route) {
-                        "home" -> navController.navigate("home") { popUpTo("history") { inclusive = true } }
-                        "history" -> { /* Already here */ }
-                        "premium" -> navController.navigate("premium")
-                        "settings" -> navController.navigate("settings")
-                    }
-                },
-            )
+            // You can add bottom navigation if needed
         },
     ) { paddingValues ->
         Column(
@@ -103,9 +146,9 @@ fun HistoryScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = KateShape.Pill,
             )
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             // Filter chips
             if (conversations.isNotEmpty()) {
                 Row(
@@ -136,20 +179,27 @@ fun HistoryScreen(
                     )
                 }
             }
-            
+
             // Content
             if (isLoading) {
                 KateLoadingState(message = "Loading history...")
             } else if (conversations.isEmpty()) {
                 EmptyHistoryState()
             } else {
+                // Filter conversations by selected filter and search query
+                val filtered = conversations.filter { conv ->
+                    val matchesFilter = selectedFilter == null || conv.intent == selectedFilter
+                    val matchesSearch = searchQuery.isEmpty() ||
+                            conv.query.contains(searchQuery, ignoreCase = true) ||
+                            conv.response.contains(searchQuery, ignoreCase = true)
+                    matchesFilter && matchesSearch
+                }
+
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(conversations.filter { conv ->
-                        selectedFilter == null || conv.intent == selectedFilter
-                    }) { conversation ->
+                    items(filtered) { conversation ->
                         HistoryItem(conversation = conversation)
                     }
                 }
@@ -158,6 +208,7 @@ fun HistoryScreen(
     }
 }
 
+// ==================== COMPOSABLES ====================
 @Composable
 private fun HistoryItem(
     conversation: HistoryConversation,
@@ -191,26 +242,26 @@ private fun HistoryItem(
                     color = TextTertiary,
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             Text(
                 text = conversation.response,
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 maxLines = 2,
             )
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // Intent chip
                 AssistChip(
-                    onClick = { },
-                    label = { 
+                    onClick = { /* No action */ },
+                    label = {
                         Text(
                             conversation.intent.replace("_", " ").uppercase(),
                             style = MaterialTheme.typography.labelSmall,
@@ -221,11 +272,11 @@ private fun HistoryItem(
                         labelColor = Purple70,
                     ),
                 )
-                
+
                 if (conversation.usedCloud) {
                     AssistChip(
-                        onClick = { },
-                        label = { 
+                        onClick = { /* No action */ },
+                        label = {
                             Text("☁️ Cloud", style = MaterialTheme.typography.labelSmall)
                         },
                         colors = AssistChipDefaults.assistChipColors(
@@ -252,27 +303,27 @@ private fun EmptyHistoryState() {
             text = "📜",
             style = MaterialTheme.typography.displayMedium,
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = "No conversations yet",
             style = MaterialTheme.typography.headlineSmall,
             color = TextPrimary,
             textAlign = TextAlign.Center,
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Text(
             text = "Start chatting with Kate to see your history here",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center,
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         KateButton(
             text = "Go Home",
             onClick = { /* Navigate to home */ },
@@ -280,12 +331,3 @@ private fun EmptyHistoryState() {
         )
     }
 }
-
-data class HistoryConversation(
-    val id: String,
-    val query: String,
-    val response: String,
-    val intent: String,
-    val usedCloud: Boolean,
-    val timestamp: String,
-)
