@@ -23,9 +23,8 @@ import com.dti.kate.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Placeholder ViewModel — replace with real implementation later
 class SplashViewModel {
-    fun checkAuth(): Boolean = false
+    fun checkAuth(): Boolean = false // Replace with real auth check
 }
 
 @Composable
@@ -54,13 +53,9 @@ fun SplashScreen(
         delay(400)
 
         if (isLoggedIn) {
-            navController.navigate("home") {
-                popUpTo("splash") { inclusive = true }
-            }
+            navController.navigate("home") { popUpTo("splash") { inclusive = true } }
         } else {
-            navController.navigate("onboarding") {
-                popUpTo("splash") { inclusive = true }
-            }
+            navController.navigate("onboarding") { popUpTo("splash") { inclusive = true } }
         }
     }
 
@@ -73,20 +68,14 @@ fun SplashScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Purple90, Background)
-                    )
+                    brush = Brush.verticalGradient(colors = listOf(Purple90, Background))
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                // Use a placeholder drawable if kate_splash_logo doesn't exist
-                // Replace with your actual splash logo when ready.
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Replace with your actual splash logo drawable
                 Image(
-                    painter = painterResource(R.drawable.kate_avatar_idle), // fallback
+                    painter = painterResource(R.drawable.kate_avatar_idle),
                     contentDescription = "Kate Assistant",
                     modifier = Modifier
                         .size(180.dp)
@@ -110,19 +99,13 @@ fun SplashScreen(
                             ),
                             textAlign = TextAlign.Center,
                         )
-
                         Spacer(modifier = Modifier.height(8.dp))
-
                         Text(
                             text = "AI Voice Assistant",
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                color = Purple30,
-                            ),
+                            style = MaterialTheme.typography.bodyLarge.copy(color = Purple30),
                             textAlign = TextAlign.Center,
                         )
-
                         Spacer(modifier = Modifier.height(16.dp))
-
                         Box(
                             modifier = Modifier
                                 .width(60.dp)
