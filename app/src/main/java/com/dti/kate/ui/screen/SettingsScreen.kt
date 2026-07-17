@@ -20,7 +20,7 @@ import com.dti.kate.BuildConfig
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
-// ==================== DATA CLASSES ====================
+// Data classes and ViewModel
 data class WakeTrigger(
     val id: String,
     val label: String,
@@ -41,13 +41,8 @@ data class SettingsState(
     ),
 )
 
-data class User(
-    val fullName: String = "User",
-    val email: String = "user@example.com",
-    val tier: String = "free",
-)
+data class User(val fullName: String = "User", val email: String = "user@example.com", val tier: String = "free")
 
-// ==================== VIEW MODEL ====================
 class SettingsViewModel {
     private val _settings = mutableStateOf(SettingsState())
     val settings = _settings
@@ -61,29 +56,15 @@ class SettingsViewModel {
         }
         _settings.value = settings.value.copy(wakeTriggers = newTriggers)
     }
-
-    fun updateTone(value: Float) {
-        _settings.value = settings.value.copy(toneLevel = value)
-    }
-
-    fun updateTimeout(value: Int) {
-        _settings.value = settings.value.copy(timeoutSeconds = value)
-    }
-
-    fun toggleOfflineMode() {
-        _settings.value = settings.value.copy(offlineMode = !settings.value.offlineMode)
-    }
-
-    fun toggleSyncTraining() {
-        _settings.value = settings.value.copy(syncTraining = !settings.value.syncTraining)
-    }
-
-    fun clearLocalData() { /* TODO */ }
-    fun exportData() { /* TODO */ }
-    fun signOut() { /* TODO */ }
+    fun updateTone(value: Float) { _settings.value = settings.value.copy(toneLevel = value) }
+    fun updateTimeout(value: Int) { _settings.value = settings.value.copy(timeoutSeconds = value) }
+    fun toggleOfflineMode() { _settings.value = settings.value.copy(offlineMode = !settings.value.offlineMode) }
+    fun toggleSyncTraining() { _settings.value = settings.value.copy(syncTraining = !settings.value.syncTraining) }
+    fun clearLocalData() {}
+    fun exportData() {}
+    fun signOut() {}
 }
 
-// ==================== SCREEN ====================
 @Composable
 fun SettingsScreen(
     navController: NavController,
@@ -109,21 +90,15 @@ fun SettingsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.Outlined.ArrowBack,
-                            contentDescription = "Back",
-                            tint = TextPrimary,
-                        )
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                ),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
         },
         bottomBar = {
-            // Bottom navigation (if needed) – you can include your existing nav items.
-        },
+            // You can add BottomNavigation here if needed
+        }
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -132,24 +107,10 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Profile section
-            item {
-                ProfileCard(user = user)
-            }
+            item { ProfileCard(user = user) }
+            item { TierCard(tier = user.tier, onUpgrade = { /* Navigate to premium */ }) }
 
-            // Tier section
-            item {
-                TierCard(
-                    tier = user.tier,
-                    onUpgrade = { /* Navigate to premium */ },
-                )
-            }
-
-            // Wake Triggers
-            item {
-                SettingsSectionHeader(title = "Wake Triggers")
-            }
-
+            item { SettingsSectionHeader(title = "Wake Triggers") }
             items(settings.wakeTriggers) { trigger ->
                 SettingsSwitchItem(
                     title = trigger.label,
@@ -159,17 +120,14 @@ fun SettingsScreen(
                 )
             }
 
-            // Personality
+            item { SettingsSectionHeader(title = "Personality") }
             item {
-                SettingsSectionHeader(title = "Personality")
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Surface),
                     shape = KateShape.MD,
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                    ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "Tone: ${settings.toneLevel.toInt()}% Sass",
                             style = MaterialTheme.typography.bodyMedium,
@@ -199,17 +157,14 @@ fun SettingsScreen(
                 }
             }
 
-            // Listening
+            item { SettingsSectionHeader(title = "Listening") }
             item {
-                SettingsSectionHeader(title = "Listening")
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Surface),
                     shape = KateShape.MD,
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                    ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "Timeout: ${settings.timeoutSeconds}s",
                             style = MaterialTheme.typography.bodyMedium,
@@ -245,41 +200,33 @@ fun SettingsScreen(
                 )
             }
 
-            // Privacy
-            item {
-                SettingsSectionHeader(title = "Privacy")
-                SettingsSwitchItem(
-                    title = "Sync Training Data",
-                    description = "Help improve Kate by sharing anonymized data",
-                    checked = settings.syncTraining,
-                    onCheckedChange = { viewModel.toggleSyncTraining() },
-                )
-                SettingsButtonItem(
-                    title = "Clear Local Data",
-                    description = "Remove all cached conversations and data",
-                    onClick = { viewModel.clearLocalData() },
-                    color = Error,
-                )
-                SettingsButtonItem(
-                    title = "Export Data",
-                    description = "Download all your conversations",
-                    onClick = { viewModel.exportData() },
-                )
-            }
+            item { SettingsSectionHeader(title = "Privacy") }
+            SettingsSwitchItem(
+                title = "Sync Training Data",
+                description = "Help improve Kate by sharing anonymized data",
+                checked = settings.syncTraining,
+                onCheckedChange = { viewModel.toggleSyncTraining() },
+            )
+            SettingsButtonItem(
+                title = "Clear Local Data",
+                description = "Remove all cached conversations and data",
+                onClick = { viewModel.clearLocalData() },
+                color = Error,
+            )
+            SettingsButtonItem(
+                title = "Export Data",
+                description = "Download all your conversations",
+                onClick = { viewModel.exportData() },
+            )
 
-            // About
+            item { SettingsSectionHeader(title = "About") }
             item {
-                SettingsSectionHeader(title = "About")
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Surface),
                     shape = KateShape.MD,
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                    ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "Kate Assistant v${BuildConfig.VERSION_NAME}",
                             style = MaterialTheme.typography.bodyMedium,
@@ -291,23 +238,14 @@ fun SettingsScreen(
                             color = TextSecondary,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            KateTextButton(
-                                text = "Privacy Policy",
-                                onClick = { /* Open privacy policy */ },
-                            )
-                            KateTextButton(
-                                text = "Terms of Service",
-                                onClick = { /* Open terms */ },
-                            )
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            KateTextButton(text = "Privacy Policy", onClick = {})
+                            KateTextButton(text = "Terms of Service", onClick = {})
                         }
                     }
                 }
             }
 
-            // Sign Out
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 KateButton(
@@ -322,14 +260,12 @@ fun SettingsScreen(
     }
 }
 
-// ==================== COMPOSABLES ====================
+// ---- Helper composables (same as before) ----
 @Composable
 private fun ProfileCard(user: User) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Surface,
-        ),
+        colors = CardDefaults.cardColors(containerColor = Surface),
         shape = KateShape.MD,
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
@@ -339,7 +275,6 @@ private fun ProfileCard(user: User) {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Avatar
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -353,25 +288,11 @@ private fun ProfileCard(user: User) {
                     color = Purple70,
                 )
             }
-
             Spacer(modifier = Modifier.width(16.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = user.fullName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
-                )
-                Text(
-                    text = user.email,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = user.fullName, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Text(text = user.email, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
-
-            // Tier badge
             Surface(
                 shape = KateShape.Pill,
                 color = when (user.tier) {
@@ -399,16 +320,11 @@ private fun ProfileCard(user: User) {
 }
 
 @Composable
-private fun TierCard(
-    tier: String,
-    onUpgrade: () -> Unit,
-) {
+private fun TierCard(tier: String, onUpgrade: () -> Unit) {
     if (tier == "free") {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = Purple70.copy(alpha = 0.1f),
-            ),
+            colors = CardDefaults.cardColors(containerColor = Purple70.copy(alpha = 0.1f)),
             shape = KateShape.MD,
         ) {
             Row(
@@ -473,19 +389,9 @@ private fun SettingsSwitchItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextPrimary,
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                Text(text = description, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
             Switch(
                 checked = checked,
@@ -521,25 +427,11 @@ private fun SettingsButtonItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = color,
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.bodyMedium, color = color)
+                Text(text = description, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
-            Icon(
-                Icons.Outlined.ChevronRight,
-                contentDescription = null,
-                tint = TextSecondary,
-            )
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = TextSecondary)
         }
     }
 }
