@@ -8,14 +8,12 @@ plugins {
     alias(libs.plugins.ksp) apply false
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url = uri("https://jitpack.io") }
-        maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
-    }
-}
+// ============================================================================
+// REPOSITORIES ARE DEFINED IN settings.gradle.kts
+// DO NOT ADD THEM HERE – IT WILL CAUSE A BUILD FAILURE
+// ============================================================================
+
+// Remove the allprojects block with repositories – it's now in settings.gradle.kts
 
 tasks.register("clean", Delete::class) {
     delete(rootProject.buildDir)
