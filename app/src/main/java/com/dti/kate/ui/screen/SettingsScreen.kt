@@ -1,31 +1,97 @@
 package com.dti.kate.ui.screen
 
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.dti.kate.R
+import com.dti.kate.BuildConfig
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
+// ==================== DATA CLASSES ====================
+data class WakeTrigger(
+    val id: String,
+    val label: String,
+    val description: String,
+    val enabled: Boolean,
+)
+
+data class SettingsState(
+    val toneLevel: Float = 0.5f,
+    val timeoutSeconds: Int = 10,
+    val offlineMode: Boolean = false,
+    val syncTraining: Boolean = true,
+    val wakeTriggers: List<WakeTrigger> = listOf(
+        WakeTrigger("raise", "Raise to Wake", "Raise phone to activate Kate", true),
+        WakeTrigger("double_tap", "Double Tap", "Double tap screen", false),
+        WakeTrigger("shake", "Shake", "Shake device", false),
+        WakeTrigger("button", "Home Button", "Press home button", false),
+    ),
+)
+
+data class User(
+    val fullName: String = "User",
+    val email: String = "user@example.com",
+    val tier: String = "free",
+)
+
+// ==================== VIEW MODEL ====================
+class SettingsViewModel {
+    private val _settings = mutableStateOf(SettingsState())
+    val settings = _settings
+
+    private val _user = mutableStateOf(User())
+    val user = _user
+
+    fun toggleWakeTrigger(id: String) {
+        val newTriggers = settings.value.wakeTriggers.map {
+            if (it.id == id) it.copy(enabled = !it.enabled) else it
+        }
+        _settings.value = settings.value.copy(wakeTriggers = newTriggers)
+    }
+
+    fun updateTone(value: Float) {
+        _settings.value = settings.value.copy(toneLevel = value)
+    }
+
+    fun updateTimeout(value: Int) {
+        _settings.value = settings.value.copy(timeoutSeconds = value)
+    }
+
+    fun toggleOfflineMode() {
+        _settings.value = settings.value.copy(offlineMode = !settings.value.offlineMode)
+    }
+
+    fun toggleSyncTraining() {
+        _settings.value = settings.value.copy(syncTraining = !settings.value.syncTraining)
+    }
+
+    fun clearLocalData() { /* TODO */ }
+    fun exportData() { /* TODO */ }
+    fun signOut() { /* TODO */ }
+}
+
+// ==================== SCREEN ====================
 @Composable
 fun SettingsScreen(
     navController: NavController,
-    viewModel: SettingsViewModel = viewModel(),
+    viewModel: SettingsViewModel = SettingsViewModel(),
 ) {
-    val settings by viewModel.settings.collectAsState()
-    val user by viewModel.user.collectAsState()
-    
+    val settings by viewModel.settings
+    val user by viewModel.user
+
     Scaffold(
         modifier = Modifier.background(Background),
         containerColor = Background,
@@ -56,18 +122,7 @@ fun SettingsScreen(
             )
         },
         bottomBar = {
-            KateBottomNavigation(
-                items = bottomNavItems,
-                currentRoute = "settings",
-                onItemClick = { route ->
-                    when (route) {
-                        "home" -> navController.navigate("home") { popUpTo("settings") { inclusive = true } }
-                        "history" -> navController.navigate("history")
-                        "premium" -> navController.navigate("premium")
-                        "settings" -> { /* Already here */ }
-                    }
-                },
-            )
+            // Bottom navigation (if needed) – you can include your existing nav items.
         },
     ) { paddingValues ->
         LazyColumn(
@@ -81,20 +136,20 @@ fun SettingsScreen(
             item {
                 ProfileCard(user = user)
             }
-            
+
             // Tier section
             item {
                 TierCard(
-                    tier = user?.tier ?: "free",
-                    onUpgrade = { navController.navigate("premium") },
+                    tier = user.tier,
+                    onUpgrade = { /* Navigate to premium */ },
                 )
             }
-            
+
             // Wake Triggers
             item {
                 SettingsSectionHeader(title = "Wake Triggers")
             }
-            
+
             items(settings.wakeTriggers) { trigger ->
                 SettingsSwitchItem(
                     title = trigger.label,
@@ -103,7 +158,7 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.toggleWakeTrigger(trigger.id) },
                 )
             }
-            
+
             // Personality
             item {
                 SettingsSectionHeader(title = "Personality")
@@ -143,7 +198,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            
+
             // Listening
             item {
                 SettingsSectionHeader(title = "Listening")
@@ -189,7 +244,7 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.toggleOfflineMode() },
                 )
             }
-            
+
             // Privacy
             item {
                 SettingsSectionHeader(title = "Privacy")
@@ -211,7 +266,7 @@ fun SettingsScreen(
                     onClick = { viewModel.exportData() },
                 )
             }
-            
+
             // About
             item {
                 SettingsSectionHeader(title = "About")
@@ -226,7 +281,7 @@ fun SettingsScreen(
                             .padding(16.dp),
                     ) {
                         Text(
-                            text = "Kate Assistant v1.0.0",
+                            text = "Kate Assistant v${BuildConfig.VERSION_NAME}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextPrimary,
                         )
@@ -251,7 +306,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            
+
             // Sign Out
             item {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -267,8 +322,9 @@ fun SettingsScreen(
     }
 }
 
+// ==================== COMPOSABLES ====================
 @Composable
-private fun ProfileCard(user: User?) {
+private fun ProfileCard(user: User) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -292,33 +348,33 @@ private fun ProfileCard(user: User?) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = user?.fullName?.firstOrNull()?.uppercase() ?: "U",
+                    text = user.fullName.firstOrNull()?.uppercase() ?: "U",
                     style = MaterialTheme.typography.titleLarge,
                     color = Purple70,
                 )
             }
-            
+
             Spacer(modifier = Modifier.width(16.dp))
-            
+
             Column(
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
-                    text = user?.fullName ?: "User",
+                    text = user.fullName,
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimary,
                 )
                 Text(
-                    text = user?.email ?: "user@example.com",
+                    text = user.email,
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                 )
             }
-            
+
             // Tier badge
             Surface(
                 shape = KateShape.Pill,
-                color = when (user?.tier) {
+                color = when (user.tier) {
                     "free" -> SurfaceVariant
                     "premium" -> Purple70
                     "pro" -> Purple70
@@ -328,9 +384,9 @@ private fun ProfileCard(user: User?) {
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Text(
-                    text = user?.tier?.uppercase() ?: "FREE",
+                    text = user.tier.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = when (user?.tier) {
+                    color = when (user.tier) {
                         "free" -> TextSecondary
                         "lifetime" -> Background
                         else -> TextPrimary
