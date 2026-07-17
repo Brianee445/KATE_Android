@@ -1,511 +1,166 @@
-package com.dti.kate.utils
+package com.dti.kate.ui.theme
 
-import android.Manifest
-import android.app.*
-import android.content.ContentValues
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.database.Cursor
-import android.hardware.camera2.CameraManager
-import android.media.AudioManager
-import android.net.Uri
-import android.net.wifi.WifiManager
-import android.os.Build
-import android.os.PowerManager
-import android.provider.CalendarContract
-import android.provider.ContactsContract
-import android.provider.Settings
-import android.telephony.SmsManager
-import android.telephony.TelephonyManager
-import androidx.core.content.ContextCompat
-import com.dti.kate.core.Logger
-import java.util.*
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import com.dti.kate.R
 
-class DeviceControlManager(private val context: Context) {
+// Font Families
+val JetBrainsMono = FontFamily(
+    Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
+    Font(R.font.jetbrains_mono_medium, FontWeight.Medium),
+    Font(R.font.jetbrains_mono_bold, FontWeight.Bold),
+    Font(R.font.jetbrains_mono_extra_bold, FontWeight.ExtraBold),
+)
+
+val Manrope = FontFamily(
+    Font(R.font.manrope_regular, FontWeight.Normal),
+    Font(R.font.manrope_medium, FontWeight.Medium),
+    Font(R.font.manrope_semi_bold, FontWeight.SemiBold),
+    Font(R.font.manrope_bold, FontWeight.Bold),
+    Font(R.font.manrope_extra_bold, FontWeight.ExtraBold),
+)
+
+// Typography Scale
+val KateTypography = Typography(
+    // Display (Branding/Headings)
+    displayLarge = TextStyle(
+        fontFamily = JetBrainsMono,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 57.sp,
+        lineHeight = 64.sp,
+        letterSpacing = (-0.25).sp,
+        color = TextPrimary,
+    ),
+    displayMedium = TextStyle(
+        fontFamily = JetBrainsMono,
+        fontWeight = FontWeight.Bold,
+        fontSize = 45.sp,
+        lineHeight = 52.sp,
+        letterSpacing = 0.sp,
+        color = TextPrimary,
+    ),
+    displaySmall = TextStyle(
+        fontFamily = JetBrainsMono,
+        fontWeight = FontWeight.Bold,
+        fontSize = 36.sp,
+        lineHeight = 44.sp,
+        letterSpacing = 0.sp,
+        color = TextPrimary,
+    ),
     
-    companion object {
-        private const val TAG = "DeviceControlManager"
-        private const val CALENDAR_ACCOUNT_NAME = "Kate Assistant"
-        private const val CALENDAR_ACCOUNT_TYPE = "com.dti.kate"
-    }
+    // Headlines
+    headlineLarge = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Bold,
+        fontSize = 32.sp,
+        lineHeight = 40.sp,
+        color = TextPrimary,
+    ),
+    headlineMedium = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 28.sp,
+        lineHeight = 36.sp,
+        color = TextPrimary,
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 24.sp,
+        lineHeight = 32.sp,
+        color = TextPrimary,
+    ),
     
-    private val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    // Title
+    titleLarge = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        color = TextPrimary,
+    ),
+    titleMedium = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.15.sp,
+        color = TextPrimary,
+    ),
+    titleSmall = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp,
+        color = TextPrimary,
+    ),
     
-    private var torchState = false
-    private var currentCameraId: String? = null
+    // Body
+    bodyLarge = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.15.sp,
+        color = TextPrimary,
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.25.sp,
+        color = TextPrimary,
+    ),
+    bodySmall = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.4.sp,
+        color = TextSecondary,
+    ),
     
-    // ========================================================================
-    // 1. MAKE PHONE CALLS
-    // ========================================================================
-    
-    fun makeCall(phoneNumber: String): Boolean {
-        return try {
-            val cleanNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
-            
-            if (cleanNumber.isEmpty()) {
-                Logger.w(TAG, "Invalid phone number")
-                return false
-            }
-            
-            val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (!telephonyManager.isVoiceCapable) {
-                    Logger.w(TAG, "Device not capable of making calls")
-                    return false
-                }
-            }
-            
-            val intent = Intent(Intent.ACTION_CALL)
-            intent.data = Uri.parse("tel:$cleanNumber")
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            
-            if (ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.CALL_PHONE
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                context.startActivity(intent)
-                Logger.i(TAG, "Calling $cleanNumber")
-                true
-            } else {
-                val dialIntent = Intent(Intent.ACTION_DIAL)
-                dialIntent.data = Uri.parse("tel:$cleanNumber")
-                dialIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                context.startActivity(dialIntent)
-                true
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to make call: ${e.message}")
-            false
-        }
-    }
-    
-    // ========================================================================
-    // 2. SEND MESSAGES (SMS)
-    // ========================================================================
-    
-    fun sendMessage(phoneNumber: String, message: String): Boolean {
-        return try {
-            val cleanNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
-            
-            if (cleanNumber.isEmpty()) {
-                Logger.w(TAG, "Invalid phone number")
-                return false
-            }
-            
-            if (message.isEmpty()) {
-                Logger.w(TAG, "Empty message")
-                return false
-            }
-            
-            if (ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.SEND_SMS
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                val smsManager = SmsManager.getDefault()
-                smsManager.sendTextMessage(cleanNumber, null, message, null, null)
-                Logger.i(TAG, "Message sent to $cleanNumber")
-                true
-            } else {
-                val intent = Intent(Intent.ACTION_SENDTO)
-                intent.data = Uri.parse("smsto:$cleanNumber")
-                intent.putExtra("sms_body", message)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                context.startActivity(intent)
-                true
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to send message: ${e.message}")
-            false
-        }
-    }
-    
-    // ========================================================================
-    // 3. SEND MESSAGE TO CONTACT (by name)
-    // ========================================================================
-    
-    fun sendMessageToContact(contactName: String, message: String): Boolean {
-        return try {
-            val phoneNumber = getContactPhoneNumber(contactName)
-            if (phoneNumber.isEmpty()) {
-                Logger.w(TAG, "Contact not found: $contactName")
-                return false
-            }
-            sendMessage(phoneNumber, message)
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to send message to contact: ${e.message}")
-            false
-        }
-    }
-    
-    // ========================================================================
-    // 4. GET CONTACT PHONE NUMBER
-    // ========================================================================
-    
-    fun getContactPhoneNumber(contactName: String): String {
-        return try {
-            val contentResolver = context.contentResolver
-            val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
-            val projection = arrayOf(
-                ContactsContract.CommonDataKinds.Phone.NUMBER,
-                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
-            )
-            val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
-            val selectionArgs = arrayOf("%$contactName%")
-            
-            val cursor = contentResolver.query(
-                uri,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            )
-            
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    return it.getString(numberIndex)
-                }
-            }
-            ""
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to get contact: ${e.message}")
-            ""
-        }
-    }
-    
-    // ========================================================================
-    // 5. ADD CALENDAR EVENT
-    // ========================================================================
-    
-    fun addCalendarEvent(title: String, description: String, startTime: Long, endTime: Long): Boolean {
-        return try {
-            val calendarId = getOrCreateCalendar()
-            if (calendarId == -1L) {
-                Logger.w(TAG, "No calendar found")
-                return false
-            }
-            
-            val values = ContentValues().apply {
-                put(CalendarContract.Events.CALENDAR_ID, calendarId)
-                put(CalendarContract.Events.TITLE, title)
-                put(CalendarContract.Events.DESCRIPTION, description)
-                put(CalendarContract.Events.DTSTART, startTime)
-                put(CalendarContract.Events.DTEND, endTime)
-                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-                put(CalendarContract.Events.HAS_ALARM, 1)
-            }
-            
-            val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
-            
-            if (uri != null) {
-                val reminderValues = ContentValues().apply {
-                    put(CalendarContract.Reminders.EVENT_ID, uri.lastPathSegment?.toLong() ?: 0)
-                    put(CalendarContract.Reminders.MINUTES, 10)
-                    put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
-                }
-                context.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminderValues)
-                Logger.i(TAG, "Calendar event added: $title")
-                true
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to add calendar event: ${e.message}")
-            false
-        }
-    }
-    
-    private fun getOrCreateCalendar(): Long {
-        return try {
-            val contentResolver = context.contentResolver
-            val uri = CalendarContract.Calendars.CONTENT_URI
-            val projection = arrayOf(
-                CalendarContract.Calendars._ID,
-                CalendarContract.Calendars.NAME
-            )
-            val selection = "${CalendarContract.Calendars.ACCOUNT_NAME} = ?"
-            val selectionArgs = arrayOf(CALENDAR_ACCOUNT_NAME)
-            
-            var cursor: Cursor? = null
-            try {
-                cursor = contentResolver.query(uri, projection, selection, selectionArgs, null)
-                if (cursor != null && cursor.moveToFirst()) {
-                    val idIndex = cursor.getColumnIndex(CalendarContract.Calendars._ID)
-                    return cursor.getLong(idIndex)
-                }
-            } finally {
-                cursor?.close()
-            }
-            
-            val values = ContentValues().apply {
-                put(CalendarContract.Calendars.ACCOUNT_NAME, CALENDAR_ACCOUNT_NAME)
-                put(CalendarContract.Calendars.ACCOUNT_TYPE, CALENDAR_ACCOUNT_TYPE)
-                put(CalendarContract.Calendars.NAME, "Kate Assistant")
-                put(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME, "Kate Assistant")
-                put(CalendarContract.Calendars.CALENDAR_COLOR, 0x7C3AED)
-                put(CalendarContract.Calendars.OWNER_ACCOUNT, CALENDAR_ACCOUNT_NAME)
-                put(CalendarContract.Calendars.VISIBLE, 1)
-                put(CalendarContract.Calendars.SYNC_EVENTS, 1)
-            }
-            
-            val newUri = contentResolver.insert(uri, values)
-            newUri?.lastPathSegment?.toLong() ?: -1L
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to get calendar: ${e.message}")
-            -1L
-        }
-    }
-    
-    // ========================================================================
-    // 6. SET REMINDER
-    // ========================================================================
-    
-    fun setReminder(title: String, timeInMillis: Long): Boolean {
-        return try {
-            val endTime = timeInMillis + 30 * 60 * 1000
-            addCalendarEvent("REMINDER: $title", "", timeInMillis, endTime)
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set reminder: ${e.message}")
-            false
-        }
-    }
-    
-    // ========================================================================
-    // 7. SET TIMER
-    // ========================================================================
-    
-    fun setTimer(minutes: Int): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val intent = Intent(AlarmClock.ACTION_SET_TIMER)
-                intent.putExtra(AlarmClock.EXTRA_LENGTH, minutes)
-                intent.putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                context.startActivity(intent)
-                Logger.i(TAG, "Timer set for $minutes minutes")
-                true
-            } else {
-                createTimerNotification(minutes)
-                true
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set timer: ${e.message}")
-            false
-        }
-    }
-    
-    private fun createTimerNotification(minutes: Int) {
-        val channelId = "kate_timer_channel"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "Kate Timer",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Timer notifications from Kate"
-                enableVibration(true)
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
-        
-        val notification = Notification.Builder(context, channelId)
-            .setContentTitle("⏱️ Timer Set")
-            .setContentText("Timer for $minutes minutes")
-            .setSmallIcon(android.R.drawable.ic_menu_alarm)
-            .setAutoCancel(true)
-            .build()
-        
-        notificationManager.notify(1001, notification)
-    }
-    
-    // ========================================================================
-    // 8. CREATE NOTE
-    // ========================================================================
-    
-    fun createNote(title: String, content: String): Boolean {
-        return try {
-            val intent = Intent(Intent.ACTION_INSERT)
-            intent.type = "vnd.android.cursor.item/vnd.google.note"
-            intent.putExtra(Intent.EXTRA_TITLE, title)
-            intent.putExtra(Intent.EXTRA_TEXT, content)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            
-            if (intent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(intent)
-                Logger.i(TAG, "Note created: $title")
-                true
-            } else {
-                saveNoteToFile(title, content)
-                true
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to create note: ${e.message}")
-            false
-        }
-    }
-    
-    private fun saveNoteToFile(title: String, content: String) {
-        try {
-            val fileName = "${System.currentTimeMillis()}_$title.txt"
-            val file = java.io.File(context.filesDir, "notes/$fileName")
-            file.parentFile?.mkdirs()
-            file.writeText("$title\n\n$content")
-            Logger.i(TAG, "Note saved to file: $fileName")
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to save note: ${e.message}")
-        }
-    }
-    
-    // ========================================================================
-    // 9. TORCH / FLASHLIGHT
-    // ========================================================================
-    
-    fun toggleTorch(): Boolean {
-        return try {
-            val cameraId = cameraManager.cameraIdList.firstOrNull() ?: return false
-            currentCameraId = cameraId
-            
-            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-            val torchAvailable = characteristics.get(
-                android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE
-            ) ?: false
-            
-            if (!torchAvailable) {
-                Logger.w(TAG, "Torch not available")
-                return false
-            }
-            
-            torchState = !torchState
-            cameraManager.setTorchMode(cameraId, torchState)
-            Logger.i(TAG, "Torch ${if (torchState) "ON" else "OFF"}")
-            true
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to toggle torch: ${e.message}")
-            false
-        }
-    }
-    
-    fun setTorch(on: Boolean): Boolean {
-        if (torchState == on) return true
-        return toggleTorch()
-    }
-    
-    fun isTorchOn(): Boolean = torchState
-    
-    // ========================================================================
-    // 10. BLUETOOTH
-    // ========================================================================
-    
-    fun toggleBluetooth(): Boolean {
-        return try {
-            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
-                ?: return false
-            
-            if (bluetoothAdapter.isEnabled) {
-                bluetoothAdapter.disable()
-                Logger.i(TAG, "Bluetooth OFF")
-            } else {
-                bluetoothAdapter.enable()
-                Logger.i(TAG, "Bluetooth ON")
-            }
-            true
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to toggle Bluetooth: ${e.message}")
-            false
-        }
-    }
-    
-    // ========================================================================
-    // 11. WI-FI
-    // ========================================================================
-    
-    fun toggleWifi(): Boolean {
-        return try {
-            wifiManager.isWifiEnabled = !wifiManager.isWifiEnabled
-            Logger.i(TAG, "Wi-Fi ${if (wifiManager.isWifiEnabled) "ON" else "OFF"}")
-            true
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to toggle Wi-Fi: ${e.message}")
-            false
-        }
-    }
-    
-    // ========================================================================
-    // 12. VOLUME
-    // ========================================================================
-    
-    fun setVolume(level: Int, streamType: Int = AudioManager.STREAM_MUSIC): Boolean {
-        return try {
-            val maxVolume = audioManager.getStreamMaxVolume(streamType)
-            val clampedLevel = level.coerceIn(0, maxVolume)
-            audioManager.setStreamVolume(streamType, clampedLevel, AudioManager.FLAG_SHOW_UI)
-            Logger.i(TAG, "Volume set to $clampedLevel/$maxVolume")
-            true
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set volume: ${e.message}")
-            false
-        }
-    }
-    
-    fun increaseVolume(amount: Int = 1): Boolean {
-        return try {
-            audioManager.adjustStreamVolume(
-                AudioManager.STREAM_MUSIC,
-                amount,
-                AudioManager.FLAG_SHOW_UI
-            )
-            true
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to increase volume: ${e.message}")
-            false
-        }
-    }
-    
-    fun decreaseVolume(amount: Int = 1): Boolean {
-        return try {
-            audioManager.adjustStreamVolume(
-                AudioManager.STREAM_MUSIC,
-                -amount,
-                AudioManager.FLAG_SHOW_UI
-            )
-            true
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to decrease volume: ${e.message}")
-            false
-        }
-    }
-    
-    // ========================================================================
-    // 13. DO NOT DISTURB
-    // ========================================================================
-    
-    fun setDoNotDisturb(enabled: Boolean): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (enabled) {
-                    notificationManager.setInterruptionFilter(
-                        NotificationManager.INTERRUPTION_FILTER_PRIORITY
-                    )
-                } else {
-                    notificationManager.setInterruptionFilter(
-                        NotificationManager.INTERRUPTION_FILTER_ALL
-                    )
-                }
-                Logger.i(TAG, "DND ${if (enabled) "ON" else "OFF"}")
-                true
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to set DND: ${e.message}")
-            false
-        }
-    }
+    // Label
+    labelLarge = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp,
+        color = TextPrimary,
+    ),
+    labelMedium = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.5.sp,
+        color = TextSecondary,
+    ),
+    labelSmall = TextStyle(
+        fontFamily = Manrope,
+        fontWeight = FontWeight.Normal,
+        fontSize = 10.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.5.sp,
+        color = TextTertiary,
+    ),
+)
+
+// Convenience extension for Kate-specific text styles
+object KateTextStyles {
+    val brandLarge get() = KateTypography.displayLarge
+    val brandMedium get() = KateTypography.displayMedium
+    val brandSmall get() = KateTypography.displaySmall
+    val heading get() = KateTypography.headlineLarge
+    val subheading get() = KateTypography.headlineMedium
+    val body get() = KateTypography.bodyLarge
+    val caption get() = KateTypography.bodySmall
+    val button get() = KateTypography.labelLarge
 }
