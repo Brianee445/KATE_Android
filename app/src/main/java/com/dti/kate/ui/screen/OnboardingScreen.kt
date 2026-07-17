@@ -12,8 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -21,6 +21,14 @@ import com.dti.kate.R
 import com.dti.kate.ui.components.KateButton
 import com.dti.kate.ui.components.KateButtonType
 import com.dti.kate.ui.theme.*
+import kotlinx.coroutines.launch
+
+// ==================== DATA CLASS ====================
+data class OnboardingPage(
+    val title: String,
+    val description: String,
+    val icon: Int, // drawable resource ID
+)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -31,25 +39,27 @@ fun OnboardingScreen(
         initialPage = 0,
         pageCount = { 3 },
     )
-    
+    val coroutineScope = rememberCoroutineScope()
+
+    // Use placeholder drawables – replace with your actual onboarding images
     val onboardingPages = listOf(
         OnboardingPage(
             title = "Meet Kate",
             description = "Your offline-first AI voice assistant. Smart. Private. Always ready.",
-            icon = R.drawable.kate_onboarding_1,
+            icon = R.drawable.kate_avatar_idle, // fallback – replace with actual
         ),
         OnboardingPage(
             title = "Wake with Ease",
             description = "Raise your phone, tap the mic, or say \"Hey Kate\" to get started.",
-            icon = R.drawable.kate_onboarding_2,
+            icon = R.drawable.kate_avatar_listening, // fallback – replace with actual
         ),
         OnboardingPage(
             title = "Privacy First",
             description = "Everything stays on your device. No cloud required. Your data, your rules.",
-            icon = R.drawable.kate_onboarding_3,
+            icon = R.drawable.kate_avatar_productive, // fallback – replace with actual
         ),
     )
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -69,7 +79,7 @@ fun OnboardingScreen(
                 size = KateButtonSize.Small,
             )
         }
-        
+
         // Pager
         HorizontalPager(
             state = pagerState,
@@ -79,7 +89,7 @@ fun OnboardingScreen(
         ) { page ->
             OnboardingPageContent(page = onboardingPages[page])
         }
-        
+
         // Indicators + Buttons
         Column(
             modifier = Modifier
@@ -107,7 +117,7 @@ fun OnboardingScreen(
                     )
                 }
             }
-            
+
             // Next / Get Started button
             KateButton(
                 text = if (pagerState.currentPage == 2) "Get Started" else "Next",
@@ -137,7 +147,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        // Icon/Illustration
+        // Icon/Illustration – using fallback drawable
         Image(
             painter = painterResource(page.icon),
             contentDescription = page.title,
@@ -145,7 +155,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
                 .size(200.dp)
                 .padding(bottom = 48.dp),
         )
-        
+
         // Title
         Text(
             text = page.title,
@@ -157,7 +167,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 16.dp),
         )
-        
+
         // Description
         Text(
             text = page.description,
@@ -169,9 +179,3 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         )
     }
 }
-
-data class OnboardingPage(
-    val title: String,
-    val description: String,
-    val icon: Int,
-)
