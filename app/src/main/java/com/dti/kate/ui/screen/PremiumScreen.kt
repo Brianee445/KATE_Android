@@ -1,6 +1,7 @@
 package com.dti.kate.ui.screen
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
+
+// ... (the rest is the same as the complete PremiumScreen.kt I provided earlier)
+// Just ensure the import `import androidx.compose.foundation.background` is present.
 
 // ==================== DATA CLASSES ====================
 
