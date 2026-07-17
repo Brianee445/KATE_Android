@@ -1,4 +1,3 @@
-// app/src/main/java/com/dti/kate/ui/screen/SplashScreen.kt
 package com.dti.kate.ui.screen
 
 import androidx.compose.animation.*
@@ -24,7 +23,7 @@ import com.dti.kate.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Placeholder ViewModel - replace with actual implementation
+// Placeholder ViewModel — replace with real implementation later
 class SplashViewModel {
     fun checkAuth(): Boolean = false
 }
@@ -40,7 +39,7 @@ fun SplashScreen(
     var textAlpha by remember { mutableStateOf(0f) }
     var bottomTextAlpha by remember { mutableStateOf(0f) }
     var isVisible by remember { mutableStateOf(true) }
-    
+
     LaunchedEffect(Unit) {
         logoAlpha = 1f
         logoScale = 1f
@@ -49,11 +48,11 @@ fun SplashScreen(
         delay(500)
         bottomTextAlpha = 1f
         delay(800)
-        
+
         val isLoggedIn = viewModel.checkAuth()
         isVisible = false
         delay(400)
-        
+
         if (isLoggedIn) {
             navController.navigate("home") {
                 popUpTo("splash") { inclusive = true }
@@ -64,7 +63,7 @@ fun SplashScreen(
             }
         }
     }
-    
+
     AnimatedVisibility(
         visible = isVisible,
         enter = fadeIn(animationSpec = tween(400)),
@@ -85,6 +84,7 @@ fun SplashScreen(
                 verticalArrangement = Arrangement.Center,
             ) {
                 // Use a placeholder drawable if kate_splash_logo doesn't exist
+                // Replace with your actual splash logo when ready.
                 Image(
                     painter = painterResource(R.drawable.kate_avatar_idle), // fallback
                     contentDescription = "Kate Assistant",
@@ -93,9 +93,9 @@ fun SplashScreen(
                         .scale(logoScale)
                         .alpha(logoAlpha),
                 )
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
-                
+
                 AnimatedVisibility(
                     visible = textAlpha > 0.5f,
                     enter = fadeIn() + slideInVertically(),
@@ -110,9 +110,9 @@ fun SplashScreen(
                             ),
                             textAlign = TextAlign.Center,
                         )
-                        
+
                         Spacer(modifier = Modifier.height(8.dp))
-                        
+
                         Text(
                             text = "AI Voice Assistant",
                             style = MaterialTheme.typography.bodyLarge.copy(
@@ -120,9 +120,9 @@ fun SplashScreen(
                             ),
                             textAlign = TextAlign.Center,
                         )
-                        
+
                         Spacer(modifier = Modifier.height(16.dp))
-                        
+
                         Box(
                             modifier = Modifier
                                 .width(60.dp)
@@ -131,9 +131,9 @@ fun SplashScreen(
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(64.dp))
-                
+
                 AnimatedVisibility(
                     visible = bottomTextAlpha > 0.5f,
                     enter = fadeIn() + slideInVertically(),
