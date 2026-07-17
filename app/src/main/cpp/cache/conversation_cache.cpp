@@ -1,7 +1,7 @@
 // app/src/main/cpp/cache/conversation_cache.cpp
 
 #include "conversation_cache.h"
-#include "../core/kate_engine.h"  // For ConversationRecord
+#include "conversation_record.h"  // For ConversationRecord (avoids circular include with kate_engine.h)
 #include <android/log.h>
 #include <algorithm>
 #include <sstream>
@@ -231,9 +231,9 @@ std::vector<std::string> ConversationCache::tokenize(const std::string& text) {
 }
 
 bool ConversationCache::saveToFile(const std::string& path) {
-    try {
-        json data = json::array();
-        
+    json data = json::array();
+
+    {
         std::lock_guard<std::mutex> lock(m_mutex);
         for (const auto& pair : m_cache) {
             json entry;
@@ -244,60 +244,61 @@ bool ConversationCache::saveToFile(const std::string& path) {
             entry["access_count"] = pair.second.accessCount;
             data.push_back(entry);
         }
-        
-        std::ofstream file(path);
-        if (!file.is_open()) {
-            LOGE("Failed to open cache file for writing: %s", path.c_str());
-            return false;
-        }
-        
-        file << data.dump(2);
-        file.close();
-        
-        LOGI("Cache saved to %s (%zu entries)", path.c_str(), m_cache.size());
-        return true;
-        
-    } catch (const std::exception& e) {
-        LOGE("Failed to save cache: %s", e.what());
+    }
+
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        LOGE("Failed to open cache file for writing: %s", path.c_str());
         return false;
     }
+
+    file << data.dump(2);
+    file.close();
+
+    LOGI("Cache saved to %s (%zu entries)", path.c_str(), m_cache.size());
+    return true;
 }
 
 bool ConversationCache::loadFromFile(const std::string& path) {
-    try {
-        std::ifstream file(path);
-        if (!file.is_open()) {
-            LOGD("Cache file not found: %s", path.c_str());
-            return false;
-        }
-        
-        json data = json::parse(file);
-        
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_cache.clear();
-        
-        for (const auto& entry : data) {
-            CacheEntry cacheEntry;
-            cacheEntry.query = entry.value("query", "");
-            cacheEntry.response = entry.value("response", "");
-            cacheEntry.intent = entry.value("intent", "");
-            cacheEntry.confidence = entry.value("confidence", 0.0f);
-            cacheEntry.accessCount = entry.value("access_count", 0);
-            cacheEntry.timestamp = std::chrono::steady_clock::now();
-            
-            if (!cacheEntry.query.empty() && !cacheEntry.response.empty()) {
-                std::string normalized = normalizeQuery(cacheEntry.query);
-                m_cache[normalized] = cacheEntry;
-            }
-        }
-        
-        LOGI("Cache loaded from %s (%zu entries)", path.c_str(), m_cache.size());
-        return true;
-        
-    } catch (const std::exception& e) {
-        LOGE("Failed to load cache: %s", e.what());
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        LOGD("Cache file not found: %s", path.c_str());
         return false;
     }
+
+    // Parse without exceptions: -fno-exceptions is set for this build.
+    json data = json::parse(file, nullptr, false); // false = don't throw, returns discarded value on failure
+
+    if (data.is_discarded()) {
+        LOGE("Failed to parse cache file (invalid JSON): %s", path.c_str());
+        return false;
+    }
+
+    if (!data.is_array()) {
+        LOGE("Cache file did not contain a JSON array: %s", path.c_str());
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_cache.clear();
+
+    for (const auto& entry : data) {
+        CacheEntry cacheEntry;
+        cacheEntry.query = entry.value("query", "");
+        cacheEntry.response = entry.value("response", "");
+        cacheEntry.intent = entry.value("intent", "");
+        cacheEntry.confidence = entry.value("confidence", 0.0f);
+        cacheEntry.accessCount = entry.value("access_count", 0);
+        cacheEntry.timestamp = std::chrono::steady_clock::now();
+
+        if (!cacheEntry.query.empty() && !cacheEntry.response.empty()) {
+            std::string normalized = normalizeQuery(cacheEntry.query);
+            m_cache[normalized] = cacheEntry;
+        }
+    }
+
+    LOGI("Cache loaded from %s (%zu entries)", path.c_str(), m_cache.size());
+    return true;
 }
 
 } // namespace kate
