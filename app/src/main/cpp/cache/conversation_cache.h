@@ -12,10 +12,6 @@
 #include "conversation_record.h"
 namespace kate {
 
-// Forward declaration of ConversationRecord
-// Full definition is in kate_engine.h
-#include "conversation_record.h"
-
 struct CacheEntry {
     std::string query;
     std::string response;
