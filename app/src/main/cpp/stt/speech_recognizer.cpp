@@ -127,25 +127,11 @@ void SpeechRecognizer::processResult(const std::string& result, bool isFinal) {
 }
 
 void SpeechRecognizer::parseVoskResult(const std::string& jsonStr, std::string& text, float& confidence) {
-    try {
-        auto data = json::parse(jsonStr);
-        
-        // Check for text field
-        if (data.contains("text")) {
-            text = data["text"].get<std::string>();
-        }
-        
-        // Check for partial field
-        if (data.contains("partial")) {
-            text = data["partial"].get<std::string>();
-        }
-        
-        // Check for confidence
-        if (data.contains("confidence")) {
-            confidence = data["confidence"].get<float>();
-        }
-        
-    } catch (const std::exception& e) {
+    // Parse without exceptions: -fno-exceptions is set for this build,
+    // so we use the non-throwing parse mode instead of try/catch.
+    auto data = json::parse(jsonStr, nullptr, false); // false = don't throw, returns discarded value on failure
+
+    if (data.is_discarded()) {
         // Fallback: try to extract text manually
         size_t start = jsonStr.find("\"text\"");
         if (start != std::string::npos) {
@@ -155,6 +141,22 @@ void SpeechRecognizer::parseVoskResult(const std::string& jsonStr, std::string& 
                 text = jsonStr.substr(start, end - start);
             }
         }
+        return;
+    }
+
+    // Check for text field
+    if (data.contains("text")) {
+        text = data["text"].get<std::string>();
+    }
+
+    // Check for partial field
+    if (data.contains("partial")) {
+        text = data["partial"].get<std::string>();
+    }
+
+    // Check for confidence
+    if (data.contains("confidence")) {
+        confidence = data["confidence"].get<float>();
     }
 }
 
