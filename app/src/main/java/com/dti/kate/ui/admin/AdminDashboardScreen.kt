@@ -26,7 +26,7 @@ import com.dti.kate.ui.theme.*
 @Composable
 fun AdminDashboardScreen(
     navController: NavController,
-    viewModel: AdminDashboardViewModel = viewModel(),
+    viewModel: AdminDashboardViewModel = hiltViewModel(),
 ) {
     val stats by viewModel.stats.collectAsState()
     val errors by viewModel.errors.collectAsState()
