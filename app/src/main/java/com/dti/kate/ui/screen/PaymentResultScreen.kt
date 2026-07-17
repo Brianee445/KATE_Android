@@ -1,10 +1,11 @@
 package com.dti.kate.ui.screen
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.Image
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material3.*
@@ -12,18 +13,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.dti.kate.R
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
-// ==================== VIEW MODEL ====================
 class PaymentResultViewModel {
-    // Data class to hold result state
     data class PaymentResult(
         val success: Boolean = false,
         val tier: String? = null,
@@ -37,10 +34,8 @@ class PaymentResultViewModel {
     val isLoading = _isLoading
 
     fun loadResult() {
-        // Simulate loading – replace with actual logic
         _isLoading.value = true
-        // For demo purposes, assume success after a short delay
-        // In real implementation, retrieve from intent extras or API
+        // Simulate – replace with actual logic
         _result.value = PaymentResult(
             success = true,
             tier = "premium",
@@ -50,7 +45,6 @@ class PaymentResultViewModel {
     }
 }
 
-// ==================== SCREEN ====================
 @Composable
 fun PaymentResultScreen(
     navController: NavController,
@@ -107,7 +101,6 @@ fun PaymentResultScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    // Icon
                     AnimatedContent(
                         targetState = result.success,
                         transitionSpec = {
@@ -115,7 +108,6 @@ fun PaymentResultScreen(
                         },
                         label = "payment_icon",
                     ) { success ->
-                        // Use Material icons if drawable resources are missing
                         if (success) {
                             Icon(
                                 Icons.Outlined.CheckCircle,
@@ -135,7 +127,6 @@ fun PaymentResultScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Title
                     Text(
                         text = if (result.success) "🎉 Payment Successful!" else "❌ Payment Failed",
                         style = MaterialTheme.typography.headlineMedium.copy(
@@ -148,7 +139,6 @@ fun PaymentResultScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Message
                     Text(
                         text = if (result.success) {
                             "You're now a ${result.tier?.uppercase()} user! Enjoy all premium features."
@@ -163,7 +153,6 @@ fun PaymentResultScreen(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // Actions
                     if (result.success) {
                         KateGradientButton(
                             text = "Go to Home",
