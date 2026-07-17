@@ -9,7 +9,7 @@
 #include <mutex>
 #include <queue>
 #include <chrono>
-
+#include "conversation_record.h"
 namespace kate {
 
 // Forward declaration of ConversationRecord
