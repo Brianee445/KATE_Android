@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include <android/log.h>
-#include "core/kate_engine.h"
+#include "kate_engine.h"
 
 #define LOG_TAG "NativeBridge"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
