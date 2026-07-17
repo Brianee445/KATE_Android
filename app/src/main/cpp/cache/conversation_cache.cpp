@@ -1,20 +1,18 @@
 // app/src/main/cpp/cache/conversation_cache.cpp
 
 #include "conversation_cache.h"
-#include "conversation_record.h"  // For ConversationRecord (avoids circular include with kate_engine.h)
+#include "conversation_record.h"  // For ConversationRecord
 #include <android/log.h>
 #include <algorithm>
 #include <sstream>
 #include <cmath>
 #include <fstream>
-#include <nlohmann/json.hpp>
+#include <regex>
 
 #define LOG_TAG "ConversationCache"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-
-using json = nlohmann::json;
 
 namespace kate {
 
@@ -230,74 +228,199 @@ std::vector<std::string> ConversationCache::tokenize(const std::string& text) {
     return tokens;
 }
 
-bool ConversationCache::saveToFile(const std::string& path) {
-    json data = json::array();
-
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        for (const auto& pair : m_cache) {
-            json entry;
-            entry["query"] = pair.second.query;
-            entry["response"] = pair.second.response;
-            entry["intent"] = pair.second.intent;
-            entry["confidence"] = pair.second.confidence;
-            entry["access_count"] = pair.second.accessCount;
-            data.push_back(entry);
+// ==================== JSON ESCAPING HELPER ====================
+static std::string escapeJsonString(const std::string& str) {
+    std::string result;
+    result.reserve(str.size());
+    for (char c : str) {
+        switch (c) {
+            case '"':  result += "\\\""; break;
+            case '\\': result += "\\\\"; break;
+            case '\b': result += "\\b";  break;
+            case '\f': result += "\\f";  break;
+            case '\n': result += "\\n";  break;
+            case '\r': result += "\\r";  break;
+            case '\t': result += "\\t";  break;
+            default:
+                if (c < 32) {
+                    result += "\\u" + std::to_string(static_cast<unsigned char>(c));
+                } else {
+                    result += c;
+                }
+                break;
         }
     }
+    return result;
+}
 
+// ==================== SAVE TO FILE ====================
+bool ConversationCache::saveToFile(const std::string& path) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    
     std::ofstream file(path);
     if (!file.is_open()) {
         LOGE("Failed to open cache file for writing: %s", path.c_str());
         return false;
     }
-
-    file << data.dump(2);
+    
+    // Write JSON manually (no external library)
+    file << "[\n";
+    size_t index = 0;
+    for (const auto& pair : m_cache) {
+        const auto& entry = pair.second;
+        file << "  {\n";
+        file << "    \"query\": \"" << escapeJsonString(entry.query) << "\",\n";
+        file << "    \"response\": \"" << escapeJsonString(entry.response) << "\",\n";
+        file << "    \"intent\": \"" << escapeJsonString(entry.intent) << "\",\n";
+        file << "    \"confidence\": " << std::fixed << entry.confidence << ",\n";
+        file << "    \"access_count\": " << entry.accessCount << "\n";
+        file << "  }";
+        if (index < m_cache.size() - 1) {
+            file << ",";
+        }
+        file << "\n";
+        index++;
+    }
+    file << "]\n";
+    
     file.close();
-
     LOGI("Cache saved to %s (%zu entries)", path.c_str(), m_cache.size());
     return true;
 }
 
+// ==================== LOAD FROM FILE ====================
 bool ConversationCache::loadFromFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
         LOGD("Cache file not found: %s", path.c_str());
         return false;
     }
-
-    // Parse without exceptions: -fno-exceptions is set for this build.
-    json data = json::parse(file, nullptr, false); // false = don't throw, returns discarded value on failure
-
-    if (data.is_discarded()) {
-        LOGE("Failed to parse cache file (invalid JSON): %s", path.c_str());
+    
+    // Read entire file
+    std::string content((std::istreambuf_iterator<char>(file)),
+                         std::istreambuf_iterator<char>());
+    file.close();
+    
+    if (content.empty()) {
         return false;
     }
-
-    if (!data.is_array()) {
-        LOGE("Cache file did not contain a JSON array: %s", path.c_str());
-        return false;
-    }
-
+    
+    // Simple parsing - find each object in the array
     std::lock_guard<std::mutex> lock(m_mutex);
     m_cache.clear();
-
-    for (const auto& entry : data) {
-        CacheEntry cacheEntry;
-        cacheEntry.query = entry.value("query", "");
-        cacheEntry.response = entry.value("response", "");
-        cacheEntry.intent = entry.value("intent", "");
-        cacheEntry.confidence = entry.value("confidence", 0.0f);
-        cacheEntry.accessCount = entry.value("access_count", 0);
-        cacheEntry.timestamp = std::chrono::steady_clock::now();
-
-        if (!cacheEntry.query.empty() && !cacheEntry.response.empty()) {
-            std::string normalized = normalizeQuery(cacheEntry.query);
-            m_cache[normalized] = cacheEntry;
+    
+    // Look for "query" fields and extract data
+    // This is a simplified parser that extracts key:value pairs
+    size_t pos = 0;
+    int entriesFound = 0;
+    
+    while ((pos = content.find("\"query\"", pos)) != std::string::npos) {
+        // Find the colon after "query"
+        size_t colonPos = content.find(":", pos);
+        if (colonPos == std::string::npos) break;
+        
+        // Find the opening quote of the query value
+        size_t queryStart = content.find("\"", colonPos + 1);
+        if (queryStart == std::string::npos) break;
+        size_t queryEnd = content.find("\"", queryStart + 1);
+        if (queryEnd == std::string::npos) break;
+        
+        std::string query = content.substr(queryStart + 1, queryEnd - queryStart - 1);
+        
+        // Find "response"
+        size_t respPos = content.find("\"response\"", queryEnd);
+        if (respPos == std::string::npos) break;
+        
+        size_t respColon = content.find(":", respPos);
+        if (respColon == std::string::npos) break;
+        
+        size_t respStart = content.find("\"", respColon + 1);
+        if (respStart == std::string::npos) break;
+        size_t respEnd = content.find("\"", respStart + 1);
+        if (respEnd == std::string::npos) break;
+        
+        std::string response = content.substr(respStart + 1, respEnd - respStart - 1);
+        
+        // Find "intent"
+        size_t intentPos = content.find("\"intent\"", respEnd);
+        if (intentPos == std::string::npos) break;
+        
+        size_t intentColon = content.find(":", intentPos);
+        if (intentColon == std::string::npos) break;
+        
+        size_t intentStart = content.find("\"", intentColon + 1);
+        if (intentStart == std::string::npos) break;
+        size_t intentEnd = content.find("\"", intentStart + 1);
+        if (intentEnd == std::string::npos) break;
+        
+        std::string intent = content.substr(intentStart + 1, intentEnd - intentStart - 1);
+        
+        // Find "confidence"
+        size_t confPos = content.find("\"confidence\"", intentEnd);
+        if (confPos == std::string::npos) break;
+        
+        size_t confColon = content.find(":", confPos);
+        if (confColon == std::string::npos) break;
+        
+        // Find the number (up to comma or newline)
+        size_t confStart = confColon + 1;
+        while (confStart < content.length() && (content[confStart] == ' ' || content[confStart] == '\n')) {
+            confStart++;
         }
+        size_t confEnd = confStart;
+        while (confEnd < content.length() && content[confEnd] != ',' && content[confEnd] != '\n' && content[confEnd] != '}') {
+            confEnd++;
+        }
+        std::string confStr = content.substr(confStart, confEnd - confStart);
+        float confidence = 0.0f;
+        try {
+            confidence = std::stof(confStr);
+        } catch (...) {
+            confidence = 0.0f;
+        }
+        
+        // Find "access_count"
+        size_t accessPos = content.find("\"access_count\"", confEnd);
+        if (accessPos == std::string::npos) break;
+        
+        size_t accessColon = content.find(":", accessPos);
+        if (accessColon == std::string::npos) break;
+        
+        size_t accessStart = accessColon + 1;
+        while (accessStart < content.length() && (content[accessStart] == ' ' || content[accessStart] == '\n')) {
+            accessStart++;
+        }
+        size_t accessEnd = accessStart;
+        while (accessEnd < content.length() && content[accessEnd] != ',' && content[accessEnd] != '\n' && content[accessEnd] != '}') {
+            accessEnd++;
+        }
+        std::string accessStr = content.substr(accessStart, accessEnd - accessStart);
+        int accessCount = 0;
+        try {
+            accessCount = std::stoi(accessStr);
+        } catch (...) {
+            accessCount = 0;
+        }
+        
+        // Store the entry
+        CacheEntry entry;
+        entry.query = query;
+        entry.response = response;
+        entry.intent = intent;
+        entry.confidence = confidence;
+        entry.accessCount = accessCount;
+        entry.timestamp = std::chrono::steady_clock::now();
+        
+        if (!entry.query.empty() && !entry.response.empty()) {
+            std::string normalized = normalizeQuery(entry.query);
+            m_cache[normalized] = entry;
+            entriesFound++;
+        }
+        
+        pos = queryEnd + 1;
     }
-
-    LOGI("Cache loaded from %s (%zu entries)", path.c_str(), m_cache.size());
+    
+    LOGI("Cache loaded from %s (%d entries)", path.c_str(), entriesFound);
     return true;
 }
 
