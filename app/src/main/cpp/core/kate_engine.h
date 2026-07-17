@@ -9,17 +9,17 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <thread>
 
 #include "audio_pipeline.h"
 #include "../stt/speech_recognizer.h"
 #include "../intent/intent_engine.h"  // This defines IntentResult
 #include "../tts/tts_synthesizer.h"
 #include "../cache/conversation_cache.h"
+#include "../cache/conversation_record.h"
 
 namespace kate {
 
-// Forward declare ConversationRecord (defined in conversation_cache.h)
-#include "../cache/conversation_record.h"
 // Engine state
 enum class EngineState {
     IDLE,
