@@ -151,3 +151,125 @@ Java_com_dti_kate_core_NativeBridge_processTranscription(
     jstring text
 ) {
     const char* textStr = env->GetStringUTFChars(text, nullptr);
+
+    std::string response = KateEngine::getInstance().processTranscription(textStr);
+
+    env->ReleaseStringUTFChars(text, textStr);
+
+    return env->NewStringUTF(response.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_dti_kate_core_NativeBridge_synthesizeSpeech(
+    JNIEnv* env,
+    jobject thiz,
+    jstring text,
+    jfloat tone
+) {
+    const char* textStr = env->GetStringUTFChars(text, nullptr);
+
+    std::string result = KateEngine::getInstance().synthesizeSpeech(textStr, tone);
+
+    env->ReleaseStringUTFChars(text, textStr);
+
+    return env->NewStringUTF(result.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_dti_kate_core_NativeBridge_getCachedResponse(
+    JNIEnv* env,
+    jobject thiz,
+    jstring query
+) {
+    const char* queryStr = env->GetStringUTFChars(query, nullptr);
+
+    std::string result = KateEngine::getInstance().getCachedResponse(queryStr);
+
+    env->ReleaseStringUTFChars(query, queryStr);
+
+    return env->NewStringUTF(result.c_str());
+}
+
+JNIEXPORT jint JNICALL
+Java_com_dti_kate_core_NativeBridge_getEngineState(
+    JNIEnv* env,
+    jobject thiz
+) {
+    return static_cast<jint>(KateEngine::getInstance().getState());
+}
+
+JNIEXPORT void JNICALL
+Java_com_dti_kate_core_NativeBridge_setVADThreshold(
+    JNIEnv* env,
+    jobject thiz,
+    jfloat threshold
+) {
+    KateEngine::getInstance().setVADThreshold(threshold);
+}
+
+JNIEXPORT void JNICALL
+Java_com_dti_kate_core_NativeBridge_setSilenceTimeout(
+    JNIEnv* env,
+    jobject thiz,
+    jint ms
+) {
+    KateEngine::getInstance().setSilenceTimeout(ms);
+}
+
+JNIEXPORT void JNICALL
+Java_com_dti_kate_core_NativeBridge_setMaxListeningTime(
+    JNIEnv* env,
+    jobject thiz,
+    jint ms
+) {
+    KateEngine::getInstance().setMaxListeningTime(ms);
+}
+
+// Registers 'this' NativeBridge instance as the callback target.
+// Kotlin's NativeBridge class implements:
+//   fun onTranscription(text: String, isFinal: Boolean)
+//   fun onResponse(response: String)
+//   fun onError(error: String)
+//   fun onStateChange(state: Int)
+JNIEXPORT void JNICALL
+Java_com_dti_kate_core_NativeBridge_setCallbacks(
+    JNIEnv* env,
+    jobject thiz,
+    jobject callbackObject
+) {
+    env->GetJavaVM(&g_jvm);
+
+    if (g_callbackObject) {
+        env->DeleteGlobalRef(g_callbackObject);
+        g_callbackObject = nullptr;
+    }
+    g_callbackObject = env->NewGlobalRef(callbackObject);
+
+    jclass callbackClass = env->GetObjectClass(g_callbackObject);
+    g_onTranscriptionMethod = env->GetMethodID(callbackClass, "onTranscription", "(Ljava/lang/String;Z)V");
+    g_onResponseMethod = env->GetMethodID(callbackClass, "onResponse", "(Ljava/lang/String;)V");
+    g_onErrorMethod = env->GetMethodID(callbackClass, "onError", "(Ljava/lang/String;)V");
+    g_onStateChangeMethod = env->GetMethodID(callbackClass, "onStateChange", "(I)V");
+
+    KateEngine::getInstance().setOnTranscription(onTranscription);
+    KateEngine::getInstance().setOnResponse(onResponse);
+    KateEngine::getInstance().setOnError(onError);
+    KateEngine::getInstance().setOnStateChange(onStateChange);
+}
+
+JNIEXPORT void JNICALL
+Java_com_dti_kate_core_NativeBridge_clearCallbacks(
+    JNIEnv* env,
+    jobject thiz
+) {
+    if (g_callbackObject) {
+        env->DeleteGlobalRef(g_callbackObject);
+        g_callbackObject = nullptr;
+    }
+    g_onTranscriptionMethod = nullptr;
+    g_onResponseMethod = nullptr;
+    g_onErrorMethod = nullptr;
+    g_onStateChangeMethod = nullptr;
+}
+
+} // extern "C"
