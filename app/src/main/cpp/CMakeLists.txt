@@ -1,5 +1,5 @@
 # app/src/main/cpp/CMakeLists.txt
-# Kate Engine - Simplified Build Configuration
+# Kate Engine - Clean build without TFLite
 
 cmake_minimum_required(VERSION 3.22.1)
 project("kate_engine")
@@ -42,7 +42,7 @@ add_library(kate_engine SHARED
     stt/vosk_wrapper.cpp
     stt/speech_recognizer.cpp
     
-    # Intent (Rule-based only - no TFLite)
+    # Intent (Rule-based only)
     intent/intent_engine.cpp
     
     # TTS (Text-to-Speech)
@@ -64,7 +64,6 @@ target_include_directories(kate_engine PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/cache
     ${CMAKE_CURRENT_SOURCE_DIR}/jni
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vosk/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
 # ==================== LINK LIBRARIES ====================
