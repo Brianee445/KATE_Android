@@ -7,27 +7,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// If you have font files in res/font/, uncomment below and add R references.
-// Otherwise, system fonts are used.
-
-/*
-val JetBrainsMono = FontFamily(
-    Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
-    Font(R.font.jetbrains_mono_medium, FontWeight.Medium),
-    Font(R.font.jetbrains_mono_bold, FontWeight.Bold),
-    Font(R.font.jetbrains_mono_extra_bold, FontWeight.ExtraBold),
-)
-
-val Manrope = FontFamily(
-    Font(R.font.manrope_regular, FontWeight.Normal),
-    Font(R.font.manrope_medium, FontWeight.Medium),
-    Font(R.font.manrope_semi_bold, FontWeight.SemiBold),
-    Font(R.font.manrope_bold, FontWeight.Bold),
-    Font(R.font.manrope_extra_bold, FontWeight.ExtraBold),
-)
-*/
-
-// Fallback to system fonts
+// Fallback to system fonts – replace with your actual fonts if available
 val JetBrainsMono = FontFamily.Monospace
 val Manrope = FontFamily.SansSerif
 
