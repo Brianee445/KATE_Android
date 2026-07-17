@@ -22,7 +22,7 @@ import androidx.navigation.NavController
 import com.dti.kate.R
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
-
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun RegisterScreen(
