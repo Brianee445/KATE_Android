@@ -20,7 +20,7 @@ import com.dti.kate.ui.theme.*
 @Composable
 fun ForgotPasswordScreen(
     navController: NavController,
-    viewModel: AuthViewModel = viewModel(),
+    viewModel: AuthViewModel = AuthViewModel(LocalContext.current),
 ) {
     var email by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
