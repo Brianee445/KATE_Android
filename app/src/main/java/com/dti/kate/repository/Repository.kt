@@ -4,18 +4,20 @@ import android.content.Context
 import com.dti.kate.core.SecurePreferences
 import com.dti.kate.network.KateApiClient
 import com.dti.kate.network.models.*
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class Repository(private val context: Context) {
-    
+class Repository @Inject constructor(@ApplicationContext private val context: Context) {
+
     private val apiClient = KateApiClient(context)
     private val securePrefs = SecurePreferences(context)
     private val api = apiClient.api
-    
+
     // ==================== AUTH ====================
-    
+
     suspend fun register(email: String, password: String, fullName: String?): Result<AuthResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -27,7 +29,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun login(email: String, password: String): Result<AuthResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -39,7 +41,18 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
+    suspend fun forgotPassword(email: String): Result<BaseResponse> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.forgotPassword(ForgotPasswordRequest(email))
+                Result.success(response)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
     suspend fun logout(): Result<BaseResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -53,7 +66,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getCurrentUser(): Result<UserResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -65,9 +78,9 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     // ==================== CHAT ====================
-    
+
     suspend fun sendChat(query: String): Result<ChatResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -79,7 +92,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getChatHistory(limit: Int = 50, offset: Int = 0, intentFilter: String? = null): Result<HistoryResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -91,7 +104,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun clearChatHistory(): Result<BaseResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -103,9 +116,9 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     // ==================== SYNC ====================
-    
+
     suspend fun syncConversations(): Result<SyncResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -117,7 +130,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun checkModelUpdates(currentVersion: String): Result<ModelUpdateResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -129,9 +142,9 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     // ==================== PAYMENTS ====================
-    
+
     suspend fun createCheckout(tier: String, provider: String): Result<CheckoutResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -143,7 +156,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getSubscriptionStatus(): Result<SubscriptionStatusResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -155,7 +168,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun cancelSubscription(): Result<BaseResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -167,9 +180,9 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     // ==================== USER ====================
-    
+
     suspend fun updateProfile(fullName: String? = null, syncTraining: Boolean? = null): Result<UserResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -181,7 +194,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getUsage(): Result<UsageResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -193,9 +206,9 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     // ==================== ADMIN ====================
-    
+
     suspend fun verifyAdmin(passcode: String): Result<AdminVerifyResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -212,7 +225,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getAdminStats(): Result<AdminDashboardStats> {
         return withContext(Dispatchers.IO) {
             try {
@@ -224,7 +237,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getAdminErrors(limit: Int = 50, severity: String? = null): Result<AdminErrorsResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -236,7 +249,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getAdminActivity(days: Int = 7): Result<AdminActivityResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -248,7 +261,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getAdminUsers(page: Int = 1, limit: Int = 20, tier: String? = null): Result<AdminUsersResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -260,7 +273,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun getAdminSystemInfo(): Result<AdminSystemResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -272,7 +285,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun reportClientError(error: ClientErrorReport): Result<BaseResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -284,7 +297,7 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     suspend fun clearAdminErrors(): Result<BaseResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -296,13 +309,13 @@ class Repository(private val context: Context) {
             }
         }
     }
-    
+
     // ==================== HELPERS ====================
-    
+
     fun isAuthenticated(): Boolean = apiClient.isAuthenticated()
     fun isAdmin(): Boolean = securePrefs.isAdmin()
     fun getAdminRole(): String? = securePrefs.getAdminRole()
-    
+
     fun logoutLocal() {
         securePrefs.clearTokens()
         securePrefs.clearAdminTokens()
