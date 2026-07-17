@@ -8,14 +8,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 
-// ==================== Colors (already defined in Color.kt) ====================
-// Ensure Color.kt exists with these definitions:
-// Purple70, Purple90, Purple30, LimeAccent, Background, Surface, SurfaceVariant,
-// TextPrimary, TextSecondary, TextTertiary, Error, etc.
-
-// For safety, define them here if missing, but they should be in Color.kt.
-
-// ==================== Shapes ====================
 val KateShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
     small = RoundedCornerShape(8.dp),
@@ -24,7 +16,6 @@ val KateShapes = Shapes(
     extraLarge = RoundedCornerShape(24.dp),
 )
 
-// Shape constants (used in components)
 object KateShape {
     val None = RoundedCornerShape(0.dp)
     val XS = RoundedCornerShape(4.dp)
@@ -37,7 +28,6 @@ object KateShape {
     val Pill = RoundedCornerShape(100)
 }
 
-// ==================== Color Scheme ====================
 private val DarkColorScheme = darkColorScheme(
     primary = Purple70,
     onPrimary = TextPrimary,
@@ -57,7 +47,6 @@ private val DarkColorScheme = darkColorScheme(
     onError = TextPrimary,
 )
 
-// ==================== Theme Composable ====================
 @Composable
 fun KateTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
