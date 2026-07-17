@@ -1,32 +1,9 @@
 package com.dti.kate.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-
-val KateShapes = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(16.dp),
-    extraLarge = RoundedCornerShape(24.dp),
-)
-
-object KateShape {
-    val None = RoundedCornerShape(0.dp)
-    val XS = RoundedCornerShape(4.dp)
-    val SM = RoundedCornerShape(8.dp)
-    val MD = RoundedCornerShape(12.dp)
-    val LG = RoundedCornerShape(16.dp)
-    val XL = RoundedCornerShape(24.dp)
-    val XXL = RoundedCornerShape(32.dp)
-    val Circle = RoundedCornerShape(50)
-    val Pill = RoundedCornerShape(100)
-}
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple70,
