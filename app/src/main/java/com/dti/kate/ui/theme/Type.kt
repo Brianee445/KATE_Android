@@ -1,3 +1,4 @@
+// app/src/main/java/com/dti/kate/ui/theme/Type.kt
 package com.dti.kate.ui.theme
 
 import androidx.compose.material3.Typography
@@ -6,9 +7,13 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.dti.kate.R
 
-// Font Families
+// If you don't have font files, use system fonts
+val JetBrainsMono = FontFamily.Monospace
+val Manrope = FontFamily.SansSerif
+
+// If you have font files, uncomment and use:
+/*
 val JetBrainsMono = FontFamily(
     Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
     Font(R.font.jetbrains_mono_medium, FontWeight.Medium),
@@ -23,10 +28,9 @@ val Manrope = FontFamily(
     Font(R.font.manrope_bold, FontWeight.Bold),
     Font(R.font.manrope_extra_bold, FontWeight.ExtraBold),
 )
+*/
 
-// Typography Scale
 val KateTypography = Typography(
-    // Display (Branding/Headings)
     displayLarge = TextStyle(
         fontFamily = JetBrainsMono,
         fontWeight = FontWeight.ExtraBold,
@@ -40,7 +44,6 @@ val KateTypography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 45.sp,
         lineHeight = 52.sp,
-        letterSpacing = 0.sp,
         color = TextPrimary,
     ),
     displaySmall = TextStyle(
@@ -48,11 +51,8 @@ val KateTypography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 36.sp,
         lineHeight = 44.sp,
-        letterSpacing = 0.sp,
         color = TextPrimary,
     ),
-    
-    // Headlines
     headlineLarge = TextStyle(
         fontFamily = Manrope,
         fontWeight = FontWeight.Bold,
@@ -74,8 +74,6 @@ val KateTypography = Typography(
         lineHeight = 32.sp,
         color = TextPrimary,
     ),
-    
-    // Title
     titleLarge = TextStyle(
         fontFamily = Manrope,
         fontWeight = FontWeight.Bold,
@@ -99,8 +97,6 @@ val KateTypography = Typography(
         letterSpacing = 0.1.sp,
         color = TextPrimary,
     ),
-    
-    // Body
     bodyLarge = TextStyle(
         fontFamily = Manrope,
         fontWeight = FontWeight.Normal,
@@ -125,8 +121,6 @@ val KateTypography = Typography(
         letterSpacing = 0.4.sp,
         color = TextSecondary,
     ),
-    
-    // Label
     labelLarge = TextStyle(
         fontFamily = Manrope,
         fontWeight = FontWeight.Medium,
@@ -152,15 +146,3 @@ val KateTypography = Typography(
         color = TextTertiary,
     ),
 )
-
-// Convenience extension for Kate-specific text styles
-object KateTextStyles {
-    val brandLarge = Typography.displayLarge
-    val brandMedium = Typography.displayMedium
-    val brandSmall = Typography.displaySmall
-    val heading = Typography.headlineLarge
-    val subheading = Typography.headlineMedium
-    val body = Typography.bodyLarge
-    val caption = Typography.bodySmall
-    val button = Typography.labelLarge
-}
