@@ -23,17 +23,11 @@ import com.dti.kate.R
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
-class AuthViewModel {
-    fun register(email: String, password: String, fullName: String, callback: (Boolean, String?) -> Unit) {
-        callback(true, null) // Replace with real logic
-    }
-    fun registerWithGoogle() {}
-}
 
 @Composable
 fun RegisterScreen(
     navController: NavController,
-    viewModel: AuthViewModel = AuthViewModel(),
+    viewModel: AuthViewModel = AuthViewModel(LocalContext.current),
 ) {
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
