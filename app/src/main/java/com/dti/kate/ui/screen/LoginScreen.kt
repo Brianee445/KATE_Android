@@ -1,14 +1,19 @@
 package com.dti.kate.ui.screen
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -19,19 +24,29 @@ import com.dti.kate.R
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
+// ==================== VIEW MODEL ====================
+class AuthViewModel {
+    fun login(email: String, password: String, callback: (Boolean, String?) -> Unit) {
+        // Replace with real authentication logic
+        callback(true, null)
+    }
+    fun loginWithGoogle() { /* TODO */ }
+}
+
+// ==================== SCREEN ====================
 @Composable
 fun LoginScreen(
     navController: NavController,
-    viewModel: AuthViewModel = viewModel(),
+    viewModel: AuthViewModel = AuthViewModel(),
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    
+
     val scrollState = rememberScrollState()
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -40,15 +55,15 @@ fun LoginScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Logo
+        // Logo – replace with your actual drawable
         Image(
-            painter = painterResource(R.drawable.kate_logo_medium),
+            painter = painterResource(R.drawable.kate_avatar_idle), // fallback
             contentDescription = "Kate Assistant",
             modifier = Modifier
                 .size(80.dp)
                 .padding(bottom = 16.dp),
         )
-        
+
         Text(
             text = "Welcome Back",
             style = MaterialTheme.typography.headlineLarge.copy(
@@ -59,7 +74,7 @@ fun LoginScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 8.dp),
         )
-        
+
         Text(
             text = "Sign in to continue using Kate",
             style = MaterialTheme.typography.bodyMedium.copy(
@@ -68,7 +83,7 @@ fun LoginScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 32.dp),
         )
-        
+
         // Email Field
         KateTextField(
             value = email,
@@ -80,9 +95,9 @@ fun LoginScreen(
             isError = errorMessage != null,
             errorMessage = errorMessage,
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Password Field
         KateTextField(
             value = password,
@@ -104,9 +119,9 @@ fun LoginScreen(
             isError = errorMessage != null,
             errorMessage = errorMessage,
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         // Forgot Password
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -118,9 +133,9 @@ fun LoginScreen(
                 color = Purple30,
             )
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         // Login Button
         KateGradientButton(
             text = "Sign In",
@@ -144,9 +159,9 @@ fun LoginScreen(
             isEnabled = !isLoading,
             size = KateButtonSize.Large,
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Divider
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -171,9 +186,9 @@ fun LoginScreen(
                     .background(Divider)
             )
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Google Sign In
         KateButton(
             text = "Continue with Google",
@@ -189,9 +204,9 @@ fun LoginScreen(
                 )
             },
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         // Register link
         Row(
             modifier = Modifier.padding(top = 16.dp),
@@ -213,5 +228,5 @@ fun LoginScreen(
 
 private fun validateInput(email: String, password: String): Boolean {
     return email.isNotEmpty() && android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() &&
-           password.isNotEmpty() && password.length >= 6
+            password.isNotEmpty() && password.length >= 6
 }
