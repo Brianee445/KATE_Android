@@ -18,9 +18,4 @@
             </item>
         </layer-list>
     </foreground>
-    <monochrome>
-        <bitmap
-            android:src="@drawable/ic_launcher_monochrome"
-            android:gravity="center" />
-    </monochrome>
 </adaptive-icon>
