@@ -8,10 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,13 +23,11 @@ import com.dti.kate.R
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 
-// Placeholder ViewModel — replace with real implementation
 class AuthViewModel {
     fun register(email: String, password: String, fullName: String, callback: (Boolean, String?) -> Unit) {
-        // Simulate network call
-        callback(true, null)
+        callback(true, null) // Replace with real logic
     }
-    fun registerWithGoogle() { /* TODO */ }
+    fun registerWithGoogle() {}
 }
 
 @Composable
@@ -58,9 +53,8 @@ fun RegisterScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Header
         Image(
-            painter = painterResource(R.drawable.kate_avatar_idle), // fallback
+            painter = painterResource(R.drawable.kate_avatar_idle),
             contentDescription = "Kate Assistant",
             modifier = Modifier
                 .size(64.dp)
@@ -80,14 +74,11 @@ fun RegisterScreen(
 
         Text(
             text = "Start your journey with Kate",
-            style = MaterialTheme.typography.bodyMedium.copy(
-                color = TextSecondary,
-            ),
+            style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 32.dp),
         )
 
-        // Full Name
         KateTextField(
             value = fullName,
             onValueChange = { fullName = it; errorMessage = null },
@@ -96,10 +87,8 @@ fun RegisterScreen(
             modifier = Modifier.fillMaxWidth(),
             isError = errorMessage != null,
         )
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Email
         KateTextField(
             value = email,
             onValueChange = { email = it; errorMessage = null },
@@ -109,10 +98,8 @@ fun RegisterScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             isError = errorMessage != null,
         )
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Password
         KateTextField(
             value = password,
             onValueChange = { password = it; errorMessage = null },
@@ -132,10 +119,8 @@ fun RegisterScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             isError = errorMessage != null,
         )
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Confirm Password
         KateTextField(
             value = confirmPassword,
             onValueChange = { confirmPassword = it; errorMessage = null },
@@ -146,10 +131,8 @@ fun RegisterScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             isError = errorMessage != null,
         )
-
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Register Button
         KateGradientButton(
             text = "Create Account",
             onClick = {
@@ -174,35 +157,16 @@ fun RegisterScreen(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
-
-        // Divider
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(1.dp)
-                    .background(Divider)
-            )
-            Text(
-                text = "OR",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(1.dp)
-                    .background(Divider)
-            )
+            Box(modifier = Modifier.weight(1f).height(1.dp).background(Divider))
+            Text(text = "OR", style = MaterialTheme.typography.bodySmall, color = TextSecondary, modifier = Modifier.padding(horizontal = 16.dp))
+            Box(modifier = Modifier.weight(1f).height(1.dp).background(Divider))
         }
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Google Sign Up
         KateButton(
             text = "Continue with Google",
             onClick = { viewModel.registerWithGoogle() },
@@ -219,8 +183,6 @@ fun RegisterScreen(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
-
-        // Login link
         Row(
             modifier = Modifier.padding(top = 16.dp),
             horizontalArrangement = Arrangement.Center,
