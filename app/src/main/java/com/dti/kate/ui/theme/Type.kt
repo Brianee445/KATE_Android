@@ -1,4 +1,3 @@
-// app/src/main/java/com/dti/kate/ui/theme/Type.kt
 package com.dti.kate.ui.theme
 
 import androidx.compose.material3.Typography
@@ -8,11 +7,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// If you don't have font files, use system fonts
-val JetBrainsMono = FontFamily.Monospace
-val Manrope = FontFamily.SansSerif
+// If you have font files in res/font/, uncomment below and add R references.
+// Otherwise, system fonts are used.
 
-// If you have font files, uncomment and use:
 /*
 val JetBrainsMono = FontFamily(
     Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
@@ -29,6 +26,10 @@ val Manrope = FontFamily(
     Font(R.font.manrope_extra_bold, FontWeight.ExtraBold),
 )
 */
+
+// Fallback to system fonts
+val JetBrainsMono = FontFamily.Monospace
+val Manrope = FontFamily.SansSerif
 
 val KateTypography = Typography(
     displayLarge = TextStyle(
