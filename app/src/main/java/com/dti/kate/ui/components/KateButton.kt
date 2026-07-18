@@ -1,9 +1,14 @@
 package com.dti.kate.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -60,7 +65,7 @@ fun KateButton(
             CircularProgressIndicator(
                 modifier = Modifier
                     .size(KateButtonDefaults.loaderSize(size)),
-                color = colors.contentColor?.value ?: TextPrimary,
+                color = colors.contentColor,
                 strokeWidth = 2.dp,
             )
         } else {
