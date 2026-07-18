@@ -178,7 +178,7 @@ class KateApiClient(private val context: Context) {
             if (response.code == 401) {
                 response.close()
                 // Try to refresh token
-                val newToken = refreshAccessToken()
+                val newToken = runBlocking { refreshAccessToken() }
                 if (newToken != null) {
                     // Retry with new token
                     val newRequest = chain.request().newBuilder()
