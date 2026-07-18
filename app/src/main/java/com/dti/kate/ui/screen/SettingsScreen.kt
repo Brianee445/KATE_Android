@@ -19,7 +19,7 @@ import androidx.navigation.NavController
 import com.dti.kate.BuildConfig
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
-
+import androidx.compose.foundation.background
 // Data classes and ViewModel
 data class WakeTrigger(
     val id: String,
@@ -199,25 +199,30 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.toggleOfflineMode() },
                 )
             }
-
-            item { SettingsSectionHeader(title = "Privacy") }
-            SettingsSwitchItem(
-                title = "Sync Training Data",
-                description = "Help improve Kate by sharing anonymized data",
-                checked = settings.syncTraining,
-                onCheckedChange = { viewModel.toggleSyncTraining() },
-            )
-            SettingsButtonItem(
-                title = "Clear Local Data",
-                description = "Remove all cached conversations and data",
-                onClick = { viewModel.clearLocalData() },
-                color = Error,
-            )
-            SettingsButtonItem(
-                title = "Export Data",
-                description = "Download all your conversations",
-                onClick = { viewModel.exportData() },
-            )
+item { SettingsSectionHeader(title = "Privacy") }
+            item {
+                SettingsSwitchItem(
+                    title = "Sync Training Data",
+                    description = "Help improve Kate by sharing anonymized data",
+                    checked = settings.syncTraining,
+                    onCheckedChange = { viewModel.toggleSyncTraining() },
+                )
+            }
+            item {
+                SettingsButtonItem(
+                    title = "Clear Local Data",
+                    description = "Remove all cached conversations and data",
+                    onClick = { viewModel.clearLocalData() },
+                    color = Error,
+                )
+            }
+            item {
+                SettingsButtonItem(
+                    title = "Export Data",
+                    description = "Download all your conversations",
+                    onClick = { viewModel.exportData() },
+                )
+            }
 
             item { SettingsSectionHeader(title = "About") }
             item {
