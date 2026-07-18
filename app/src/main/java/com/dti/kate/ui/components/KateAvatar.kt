@@ -16,7 +16,10 @@ import com.dti.kate.ui.theme.KateListening
 import com.dti.kate.ui.theme.KateSpeaking
 import com.dti.kate.ui.theme.Purple70
 import com.dti.kate.ui.theme.Error
-// app/src/main/java/com/dti/kate/ui/components/KateAvatar.kt
+
+enum class KateAvatarState {
+    IDLE, LISTENING, THINKING, SPEAKING, SLEEPING, PRODUCTIVE, ERROR
+}
 
 @Composable
 fun KateAvatar(
