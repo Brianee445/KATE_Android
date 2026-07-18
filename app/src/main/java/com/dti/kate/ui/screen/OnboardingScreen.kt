@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,9 +17,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.dti.kate.R
 import com.dti.kate.ui.components.KateButton
+import com.dti.kate.ui.components.KateButtonSize
 import com.dti.kate.ui.components.KateButtonType
 import com.dti.kate.ui.theme.*
 import kotlinx.coroutines.launch
@@ -41,22 +44,22 @@ fun OnboardingScreen(
     )
     val coroutineScope = rememberCoroutineScope()
 
-    // Use placeholder drawables – replace with your actual onboarding images
+    // Uses the single source avatar image until per-state art exists
     val onboardingPages = listOf(
         OnboardingPage(
             title = "Meet Kate",
             description = "Your offline-first AI voice assistant. Smart. Private. Always ready.",
-            icon = R.drawable.kate_avatar_idle, // fallback – replace with actual
+            icon = R.drawable.kate_avatar_source,
         ),
         OnboardingPage(
             title = "Wake with Ease",
             description = "Raise your phone, tap the mic, or say \"Hey Kate\" to get started.",
-            icon = R.drawable.kate_avatar_listening, // fallback – replace with actual
+            icon = R.drawable.kate_avatar_source,
         ),
         OnboardingPage(
             title = "Privacy First",
             description = "Everything stays on your device. No cloud required. Your data, your rules.",
-            icon = R.drawable.kate_avatar_productive, // fallback – replace with actual
+            icon = R.drawable.kate_avatar_source,
         ),
     )
 
@@ -147,7 +150,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        // Icon/Illustration – using fallback drawable
+        // Icon/Illustration
         Image(
             painter = painterResource(page.icon),
             contentDescription = page.title,
