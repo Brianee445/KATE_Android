@@ -41,10 +41,6 @@ data class Conversation(
     val timestamp: Long,
 )
 
-enum class KateAvatarState {
-    IDLE, LISTENING, THINKING, SPEAKING, SLEEPING, PRODUCTIVE, ERROR
-}
-
 // ==================== VIEW MODEL ====================
 class HomeViewModel {
     private val _uiState = mutableStateOf(HomeUiState())
@@ -91,7 +87,6 @@ fun HomeScreen(
     val uiState by viewModel.uiState
     val conversations by viewModel.conversations
 
-    // Quick actions
     val quickActions = listOf(
         QuickAction("Open App", R.drawable.ic_apps, KateButtonType.Primary),
         QuickAction("Type", R.drawable.ic_type, KateButtonType.Secondary),
@@ -149,14 +144,12 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
         ) {
-            // Main content
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
             ) {
                 if (conversations.isEmpty() && !uiState.isProcessing) {
-                    // Empty state
                     EmptyState(
                         onQuickAction = { action ->
                             when (action) {
@@ -168,7 +161,6 @@ fun HomeScreen(
                         },
                     )
                 } else {
-                    // Conversation list
                     ConversationList(
                         conversations = conversations,
                         isListening = false,
@@ -176,7 +168,6 @@ fun HomeScreen(
                 }
             }
 
-            // Quick Actions
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -202,7 +193,6 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // FAB
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -224,7 +214,6 @@ fun HomeScreen(
                 )
             }
 
-            // Status text
             Text(
                 text = when {
                     uiState.isProcessing -> "Thinking..."
@@ -297,7 +286,6 @@ private fun EmptyState(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Quick action chips
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -336,7 +324,6 @@ private fun ConversationList(
             Column(
                 modifier = Modifier.padding(vertical = 4.dp),
             ) {
-                // User message
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -349,7 +336,6 @@ private fun ConversationList(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Kate response
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Start,
@@ -363,11 +349,3 @@ private fun ConversationList(
         }
     }
 }
-
-// Bottom navigation items (if needed)
-val bottomNavItems = listOf(
-    BottomNavItem("home", Icons.Filled.Home, "Home", Icons.Filled.Home),
-    BottomNavItem("history", Icons.Outlined.History, "History"),
-    BottomNavItem("premium", Icons.Filled.Star, "Premium", Icons.Filled.Star),
-    BottomNavItem("settings", Icons.Filled.Settings, "Settings", Icons.Filled.Settings),
-)
