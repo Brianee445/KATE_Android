@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -12,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -25,7 +27,7 @@ import com.dti.kate.ui.theme.*
 @Composable
 fun ForgotPasswordScreen(
     navController: NavController,
-    viewModel: AuthViewModel = AuthViewModel(),
+    viewModel: AuthViewModel = AuthViewModel(LocalContext.current),
 ) {
     var email by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -43,7 +45,6 @@ fun ForgotPasswordScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        // Back Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Start,
@@ -55,9 +56,8 @@ fun ForgotPasswordScreen(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Icon
         Image(
-            painter = painterResource(R.drawable.kate_avatar_idle), // fallback
+            painter = painterResource(R.drawable.kate_avatar_idle),
             contentDescription = "Reset Password",
             modifier = Modifier
                 .size(80.dp)
@@ -84,7 +84,6 @@ fun ForgotPasswordScreen(
             modifier = Modifier.padding(bottom = 32.dp),
         )
         
-        // Email Field
         KateTextField(
             value = email,
             onValueChange = { email = it; errorMessage = null },
@@ -100,7 +99,6 @@ fun ForgotPasswordScreen(
         Spacer(modifier = Modifier.height(24.dp))
         
         if (isSuccess) {
-            // Success message
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -138,7 +136,6 @@ fun ForgotPasswordScreen(
                 size = KateButtonSize.Large,
             )
         } else {
-            // Reset Button
             KateGradientButton(
                 text = "Send Reset Link",
                 onClick = {
