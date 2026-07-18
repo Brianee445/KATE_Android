@@ -366,8 +366,8 @@ private fun ConversationList(
 
 // Bottom navigation items (if needed)
 val bottomNavItems = listOf(
-    BottomNavItem("home", Icons.Outlined.Home, "Home", Icons.Filled.Home),
+    BottomNavItem("home", Icons.Filled.Home, "Home", Icons.Filled.Home),
     BottomNavItem("history", Icons.Outlined.History, "History"),
-    BottomNavItem("premium", Icons.Outlined.Star, "Premium", Icons.Filled.Star),
-    BottomNavItem("settings", Icons.Outlined.Settings, "Settings", Icons.Filled.Settings),
+    BottomNavItem("premium", Icons.Filled.Star, "Premium", Icons.Filled.Star),
+    BottomNavItem("settings", Icons.Filled.Settings, "Settings", Icons.Filled.Settings),
 )
