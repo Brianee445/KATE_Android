@@ -12,6 +12,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.zip.ZipFile
+import java.net.URL
 
 class VoskManager(private val context: Context) {
     
