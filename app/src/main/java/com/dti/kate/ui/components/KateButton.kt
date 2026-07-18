@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,12 +18,10 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import com.dti.kate.ui.theme.*
 
-// Button Sizes
 enum class KateButtonSize {
     Small, Medium, Large
 }
 
-// Button Types
 enum class KateButtonType {
     Primary, Secondary, Outline, Ghost, Accent
 }
@@ -78,7 +75,6 @@ fun KateButton(
     }
 }
 
-// Kate Gradient Button (brand style)
 @Composable
 fun KateGradientButton(
     text: String,
@@ -130,7 +126,6 @@ fun KateGradientButton(
     }
 }
 
-// Kate Text Button (Ghost)
 @Composable
 fun KateTextButton(
     text: String,
@@ -152,7 +147,6 @@ fun KateTextButton(
     }
 }
 
-// Button Defaults
 object KateButtonDefaults {
     @Composable
     fun primaryColors() = ButtonDefaults.buttonColors(
@@ -210,6 +204,7 @@ object KateButtonDefaults {
         },
     )
     
+    @Composable
     fun textStyle(size: KateButtonSize) = when (size) {
         KateButtonSize.Small -> MaterialTheme.typography.labelMedium
         KateButtonSize.Medium -> MaterialTheme.typography.labelLarge
