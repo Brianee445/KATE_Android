@@ -14,6 +14,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.runBlocking
 
 interface KateApiService {
     
