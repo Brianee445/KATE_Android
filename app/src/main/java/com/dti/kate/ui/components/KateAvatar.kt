@@ -28,13 +28,13 @@ fun KateAvatar(
     size: Dp = 80.dp,
 ) {
     val avatarRes = when (state) {
-        KateAvatarState.IDLE -> R.drawable.kate_avatar_idle
-        KateAvatarState.LISTENING -> R.drawable.kate_avatar_listening
-        KateAvatarState.THINKING -> R.drawable.kate_avatar_thinking
-        KateAvatarState.SPEAKING -> R.drawable.kate_avatar_speaking
-        KateAvatarState.SLEEPING -> R.drawable.kate_avatar_sleeping
-        KateAvatarState.PRODUCTIVE -> R.drawable.kate_avatar_productive
-        KateAvatarState.ERROR -> R.drawable.kate_avatar_error
+        KateAvatarState.IDLE -> R.drawable.kate_avatar_source
+        KateAvatarState.LISTENING -> R.drawable.kate_avatar_source
+        KateAvatarState.THINKING -> R.drawable.kate_avatar_source
+        KateAvatarState.SPEAKING -> R.drawable.kate_avatar_source
+        KateAvatarState.SLEEPING -> R.drawable.kate_avatar_source
+        KateAvatarState.PRODUCTIVE -> R.drawable.kate_avatar_source
+        KateAvatarState.ERROR -> R.drawable.kate_avatar_source
     }
     
     Image(
