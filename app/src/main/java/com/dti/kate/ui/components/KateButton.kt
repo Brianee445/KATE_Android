@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import com.dti.kate.ui.theme.*
+import androidx.compose.foundation.layout.fillMaxSize
 
 enum class KateButtonSize {
     Small, Medium, Large
