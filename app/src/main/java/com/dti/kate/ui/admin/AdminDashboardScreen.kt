@@ -292,7 +292,7 @@ private fun UsersTab(users: List<AdminUserItem>, onLoadMore: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                    
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
