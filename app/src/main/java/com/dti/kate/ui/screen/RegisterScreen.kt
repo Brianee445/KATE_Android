@@ -24,7 +24,7 @@ import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.font.Fontweight
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun RegisterScreen(
