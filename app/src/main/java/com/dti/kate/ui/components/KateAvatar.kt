@@ -16,7 +16,7 @@ import com.dti.kate.ui.theme.KateListening
 import com.dti.kate.ui.theme.KateSpeaking
 import com.dti.kate.ui.theme.Purple70
 import com.dti.kate.ui.theme.Error
-import androidx.compose.foundation.layout.Size
+import androidx.compose.foundation.layout.size
 
 enum class KateAvatarState {
     IDLE, LISTENING, THINKING, SPEAKING, SLEEPING, PRODUCTIVE, ERROR
