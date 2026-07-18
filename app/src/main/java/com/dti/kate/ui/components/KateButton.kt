@@ -108,7 +108,7 @@ fun KateGradientButton(
     ) {
         Box(
             modifier = Modifier
-                .matchParentSize()
+                .fillMaxSize()
                 .background(
                     brush = Brush.horizontalGradient(gradient),
                     shape = shape,
