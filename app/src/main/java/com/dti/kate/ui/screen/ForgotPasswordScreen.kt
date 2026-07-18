@@ -1,14 +1,19 @@
 package com.dti.kate.ui.screen
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -20,7 +25,7 @@ import com.dti.kate.ui.theme.*
 @Composable
 fun ForgotPasswordScreen(
     navController: NavController,
-    viewModel: AuthViewModel = AuthViewModel(LocalContext.current),
+    viewModel: AuthViewModel = AuthViewModel(),
 ) {
     var email by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -52,7 +57,7 @@ fun ForgotPasswordScreen(
         
         // Icon
         Image(
-            painter = painterResource(R.drawable.kate_lock_icon),
+            painter = painterResource(R.drawable.kate_avatar_idle), // fallback
             contentDescription = "Reset Password",
             modifier = Modifier
                 .size(80.dp)
