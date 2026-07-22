@@ -144,6 +144,14 @@ fun RegisterScreen(
                             errorMessage = error ?: "Registration failed"
                         }
                     }
+                } else {
+                    errorMessage = when {
+                        fullName.length < 2 -> "Full name must be at least 2 characters"
+                        !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() -> "Please enter a valid email address"
+                        password.length < 6 -> "Password must be at least 6 characters"
+                        password != confirmPassword -> "Passwords do not match"
+                        else -> "Please check your details and try again"
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
@@ -151,18 +159,6 @@ fun RegisterScreen(
             isEnabled = !isLoading,
             size = KateButtonSize.Large,
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.weight(1f).height(1.dp).background(Divider))
-            Text(text = "OR", style = MaterialTheme.typography.bodySmall, color = TextSecondary, modifier = Modifier.padding(horizontal = 16.dp))
-            Box(modifier = Modifier.weight(1f).height(1.dp).background(Divider))
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
         KateButton(
             text = "Continue with Google",
             onClick = { viewModel.registerWithGoogle() },
