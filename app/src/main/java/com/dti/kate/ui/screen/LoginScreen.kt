@@ -146,6 +146,8 @@ fun LoginScreen(
                             errorMessage = error ?: "Invalid email or password"
                         }
                     }
+                } else {
+                    errorMessage = "Please enter a valid email and a password of at least 6 characters"
                 }
             },
             modifier = Modifier.fillMaxWidth(),
@@ -153,8 +155,6 @@ fun LoginScreen(
             isEnabled = !isLoading,
             size = KateButtonSize.Large,
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         // Divider
         Row(
