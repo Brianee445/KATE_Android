@@ -1,5 +1,7 @@
 package com.dti.kate.ui.screen
 
+import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,14 +15,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.dti.kate.BuildConfig
+import com.dti.kate.repository.Repository
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
-import androidx.compose.foundation.background
-// Data classes and ViewModel
+import kotlinx.coroutines.launch
+
+// Data classes
 data class WakeTrigger(
     val id: String,
     val label: String,
@@ -41,37 +46,99 @@ data class SettingsState(
     ),
 )
 
-data class User(val fullName: String = "User", val email: String = "user@example.com", val tier: String = "free")
+data class SettingsUser(
+    val fullName: String = "",
+    val email: String = "",
+    val tier: String = "free",
+)
 
-class SettingsViewModel {
+class SettingsViewModel(context: Context) {
+
+    private val repository = Repository(context.applicationContext)
+
     private val _settings = mutableStateOf(SettingsState())
     val settings = _settings
 
-    private val _user = mutableStateOf(User())
+    private val _user = mutableStateOf(SettingsUser())
     val user = _user
+
+    private val _isLoading = mutableStateOf(true)
+    val isLoading = _isLoading
+
+    private val _errorMessage = mutableStateOf<String?>(null)
+    val errorMessage = _errorMessage
+
+    suspend fun loadProfile() {
+        _isLoading.value = true
+        repository.getCurrentUser().fold(
+            onSuccess = { profile ->
+                _user.value = SettingsUser(
+                    fullName = profile.fullName ?: "User",
+                    email = profile.email,
+                    tier = profile.tier,
+                )
+                _settings.value = _settings.value.copy(syncTraining = profile.syncTrainingEnabled)
+                _errorMessage.value = null
+            },
+            onFailure = { error ->
+                _errorMessage.value = error.message ?: "Failed to load profile"
+            },
+        )
+        _isLoading.value = false
+    }
+
+    suspend fun toggleSyncTraining() {
+        val newValue = !_settings.value.syncTraining
+        _settings.value = _settings.value.copy(syncTraining = newValue)
+
+        repository.updateProfile(syncTraining = newValue).fold(
+            onSuccess = { },
+            onFailure = {
+                // revert on failure
+                _settings.value = _settings.value.copy(syncTraining = !newValue)
+            },
+        )
+    }
 
     fun toggleWakeTrigger(id: String) {
         val newTriggers = settings.value.wakeTriggers.map {
             if (it.id == id) it.copy(enabled = !it.enabled) else it
         }
         _settings.value = settings.value.copy(wakeTriggers = newTriggers)
+        // TODO: persist wake trigger config to backend once a dedicated endpoint exists
     }
+
     fun updateTone(value: Float) { _settings.value = settings.value.copy(toneLevel = value) }
     fun updateTimeout(value: Int) { _settings.value = settings.value.copy(timeoutSeconds = value) }
     fun toggleOfflineMode() { _settings.value = settings.value.copy(offlineMode = !settings.value.offlineMode) }
-    fun toggleSyncTraining() { _settings.value = settings.value.copy(syncTraining = !settings.value.syncTraining) }
     fun clearLocalData() {}
     fun exportData() {}
-    fun signOut() {}
+
+    suspend fun signOut(): Boolean {
+        return repository.logout().fold(
+            onSuccess = { true },
+            onFailure = {
+                repository.logoutLocal()
+                true
+            },
+        )
+    }
 }
 
 @Composable
 fun SettingsScreen(
     navController: NavController,
-    viewModel: SettingsViewModel = SettingsViewModel(),
+    viewModel: SettingsViewModel = SettingsViewModel(LocalContext.current),
 ) {
     val settings by viewModel.settings
     val user by viewModel.user
+    val isLoading by viewModel.isLoading
+    val errorMessage by viewModel.errorMessage
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadProfile()
+    }
 
     Scaffold(
         modifier = Modifier.background(Background),
@@ -96,10 +163,17 @@ fun SettingsScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
         },
-        bottomBar = {
-            // You can add BottomNavigation here if needed
-        }
     ) { paddingValues ->
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = Purple70)
+            }
+            return@Scaffold
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -107,8 +181,19 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            errorMessage?.let { message ->
+                item {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Error,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+            }
+
             item { ProfileCard(user = user) }
-            item { TierCard(tier = user.tier, onUpgrade = { /* Navigate to premium */ }) }
+            item { TierCard(tier = user.tier, onUpgrade = { navController.navigate("premium") }) }
 
             item { SettingsSectionHeader(title = "Wake Triggers") }
             items(settings.wakeTriggers) { trigger ->
@@ -129,7 +214,7 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Tone: ${settings.toneLevel.toInt()}% Sass",
+                            text = "Tone: ${(settings.toneLevel * 100).toInt()}% Sass",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextPrimary,
                         )
@@ -192,6 +277,8 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+            item {
                 SettingsSwitchItem(
                     title = "Offline Mode",
                     description = "Use cached responses when offline",
@@ -199,13 +286,14 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.toggleOfflineMode() },
                 )
             }
-item { SettingsSectionHeader(title = "Privacy") }
+
+            item { SettingsSectionHeader(title = "Privacy") }
             item {
                 SettingsSwitchItem(
                     title = "Sync Training Data",
                     description = "Help improve Kate by sharing anonymized data",
                     checked = settings.syncTraining,
-                    onCheckedChange = { viewModel.toggleSyncTraining() },
+                    onCheckedChange = { coroutineScope.launch { viewModel.toggleSyncTraining() } },
                 )
             }
             item {
@@ -255,7 +343,14 @@ item { SettingsSectionHeader(title = "Privacy") }
                 Spacer(modifier = Modifier.height(8.dp))
                 KateButton(
                     text = "Sign Out",
-                    onClick = { viewModel.signOut() },
+                    onClick = {
+                        coroutineScope.launch {
+                            viewModel.signOut()
+                            navController.navigate("login") {
+                                popUpTo(0)
+                            }
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     type = KateButtonType.Primary,
                 )
@@ -265,9 +360,9 @@ item { SettingsSectionHeader(title = "Privacy") }
     }
 }
 
-// ---- Helper composables (same as before) ----
+// ---- Helper composables ----
 @Composable
-private fun ProfileCard(user: User) {
+private fun ProfileCard(user: SettingsUser) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
@@ -433,10 +528,4 @@ private fun SettingsButtonItem(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.bodyMedium, color = color)
-                Text(text = description, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-            }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = TextSecondary)
-        }
-    }
-}
+                Text
