@@ -129,14 +129,15 @@ fun RegisterScreen(
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-errorMessage?.let { message ->
+        errorMessage?.let { message ->
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodySmall,
                 color = Error,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
-        
+        }
+
         KateGradientButton(
             text = "Create Account",
             onClick = {
@@ -167,6 +168,18 @@ errorMessage?.let { message ->
             isEnabled = !isLoading,
             size = KateButtonSize.Large,
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.weight(1f).height(1.dp).background(Divider))
+            Text(text = "OR", style = MaterialTheme.typography.bodySmall, color = TextSecondary, modifier = Modifier.padding(horizontal = 16.dp))
+            Box(modifier = Modifier.weight(1f).height(1.dp).background(Divider))
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
         KateButton(
             text = "Continue with Google",
             onClick = { viewModel.registerWithGoogle() },
