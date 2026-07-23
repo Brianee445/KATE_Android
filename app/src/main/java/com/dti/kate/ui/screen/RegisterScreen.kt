@@ -129,6 +129,14 @@ fun RegisterScreen(
         )
         Spacer(modifier = Modifier.height(24.dp))
 
+errorMessage?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = Error,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+        
         KateGradientButton(
             text = "Create Account",
             onClick = {
