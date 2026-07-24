@@ -1,5 +1,7 @@
 package com.dti.kate.ui
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +12,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.dti.kate.core.VoskManager
+import com.dti.kate.repository.Repository
+import com.dti.kate.service.KateForegroundService
 import com.dti.kate.ui.admin.AdminDashboardScreen
 import com.dti.kate.ui.screen.*
 import com.dti.kate.ui.theme.KateTheme
@@ -31,8 +35,23 @@ class KateActivity : ComponentActivity() {
 fun KateNavHost(navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
     val voskManager = remember { VoskManager(context) }
+    val repository = remember { Repository(context.applicationContext) }
 
-    NavHost(navController = navController, startDestination = "splash") {
+    val isAuthenticated = repository.isAuthenticated()
+    val startDestination = if (isAuthenticated) "home" else "splash"
+
+    // Kate's background service (charging-state speech, future always-on
+    // listening) should only run once the user is actually signed in.
+    if (isAuthenticated) {
+        val serviceIntent = Intent(context, KateForegroundService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(serviceIntent)
+        } else {
+            context.startService(serviceIntent)
+        }
+    }
+
+    NavHost(navController = navController, startDestination = startDestination) {
         composable("splash") { SplashScreen(navController) }
         composable("onboarding") { OnboardingScreen(navController) }
         composable("login") { LoginScreen(navController) }
