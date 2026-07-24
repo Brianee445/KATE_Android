@@ -169,6 +169,15 @@ fun RegisterScreen(
             size = KateButtonSize.Large,
         )
 
+        if (isLoading) {
+            Text(
+                text = "Connecting to Kate's servers...",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
