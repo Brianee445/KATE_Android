@@ -1,5 +1,7 @@
 package com.dti.kate.ui.screen
 
+import android.content.Intent
+import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -13,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -22,15 +25,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.dti.kate.R
+import com.dti.kate.service.KateForegroundService
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
-import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun LoginScreen(
     navController: NavController,
     viewModel: AuthViewModel = AuthViewModel(LocalContext.current),
 ) {
+    val context = LocalContext.current
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -132,6 +137,16 @@ fun LoginScreen(
                     viewModel.login(email, password) { success, error ->
                         isLoading = false
                         if (success) {
+                            // Start Kate's background service (charging-state
+                            // speech, future always-on listening) right away
+                            // rather than waiting for the next app launch.
+                            val serviceIntent = Intent(context, KateForegroundService::class.java)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(serviceIntent)
+                            } else {
+                                context.startService(serviceIntent)
+                            }
+
                             navController.navigate("home") {
                                 popUpTo("login") { inclusive = true }
                             }
