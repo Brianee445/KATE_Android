@@ -55,15 +55,8 @@ data class SettingsUser(
 class SettingsViewModel(context: Context) {
 
     private val repository = Repository(context.applicationContext)
-    private val localStore = LocalSettingsStore(context)
 
-    private val _settings = mutableStateOf(
-        SettingsState(
-            toneLevel = localStore.getToneLevel(),
-            timeoutSeconds = localStore.getTimeoutSeconds(),
-            offlineMode = localStore.getOfflineMode(),
-        )
-    )
+    private val _settings = mutableStateOf(SettingsState())
     val settings = _settings
 
     private val _user = mutableStateOf(SettingsUser())
@@ -101,6 +94,7 @@ class SettingsViewModel(context: Context) {
         repository.updateProfile(syncTraining = newValue).fold(
             onSuccess = { },
             onFailure = {
+                // revert on failure
                 _settings.value = _settings.value.copy(syncTraining = !newValue)
             },
         )
@@ -111,24 +105,12 @@ class SettingsViewModel(context: Context) {
             if (it.id == id) it.copy(enabled = !it.enabled) else it
         }
         _settings.value = settings.value.copy(wakeTriggers = newTriggers)
+        // TODO: persist wake trigger config to backend once a dedicated endpoint exists
     }
 
-    fun updateTone(value: Float) {
-        _settings.value = settings.value.copy(toneLevel = value)
-        localStore.setToneLevel(value)
-    }
-
-    fun updateTimeout(value: Int) {
-        _settings.value = settings.value.copy(timeoutSeconds = value)
-        localStore.setTimeoutSeconds(value)
-    }
-
-    fun toggleOfflineMode() {
-        val newValue = !settings.value.offlineMode
-        _settings.value = settings.value.copy(offlineMode = newValue)
-        localStore.setOfflineMode(newValue)
-    }
-
+    fun updateTone(value: Float) { _settings.value = settings.value.copy(toneLevel = value) }
+    fun updateTimeout(value: Int) { _settings.value = settings.value.copy(timeoutSeconds = value) }
+    fun toggleOfflineMode() { _settings.value = settings.value.copy(offlineMode = !settings.value.offlineMode) }
     fun clearLocalData() {}
     fun exportData() {}
 
@@ -546,4 +528,10 @@ private fun SettingsButtonItem(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text
+                Text(text = title, style = MaterialTheme.typography.bodyMedium, color = color)
+                Text(text = description, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = TextSecondary)
+        }
+    }
+}
