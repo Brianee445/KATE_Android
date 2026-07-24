@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.dti.kate.R
 import com.dti.kate.core.*
+import com.dti.kate.service.KateAccessibilityService
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -51,16 +52,16 @@ fun HomeScreen(
     val webSearchService = remember { WebSearchService() }
     val locationHelper = remember { LocationHelper(context) }
     val audioCapture = remember { AudioCapture() }
+    val appLauncher = remember { AppLauncher(context) }
 
     var kateState by remember { mutableStateOf(KateState.IDLE) }
-    var lastQuery by remember { mutableStateOf("") }
     var lastReply by remember { mutableStateOf("") }
     var voskReady by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Warming up Kate...") }
+    var listenJobActive by remember { mutableStateOf(false) }
 
     val liveTranscription by voskManager.transcription.collectAsState()
 
-    // TextToSpeech setup
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     DisposableEffect(Unit) {
         val instance = TextToSpeech(context) { }
@@ -84,7 +85,6 @@ fun HomeScreen(
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "kate_reply")
     }
 
-    // Initialize Vosk once
     LaunchedEffect(Unit) {
         voskManager.initialize { success ->
             voskReady = success
@@ -98,15 +98,27 @@ fun HomeScreen(
             return
         }
 
-        lastQuery = query
         kateState = KateState.PROCESSING
         val tone = toneFromSlider(localSettings.getToneLevel())
 
         val action = responseGenerator.classify(query)
         val reply: String = when (action) {
             is KateAction.OpenApp -> {
-                deviceControl.let { /* app-open intent could be added here later */ }
-                responseGenerator.speechForOpenApp(action.appName, tone)
+                val opened = appLauncher.openAppByName(action.appName)
+                if (opened) {
+                    responseGenerator.speechForOpenApp(action.appName, tone)
+                } else {
+                    "I couldn't find an app called ${action.appName} on this device."
+                }
+            }
+            is KateAction.TypeText -> {
+                if (!KateAccessibilityService.isEnabled(context)) {
+                    KateAccessibilityService.openAccessibilitySettings(context)
+                    "I need accessibility access to type for you - please turn it on for Kate."
+                } else {
+                    val typed = KateAccessibilityService.instance?.typeText(action.text) ?: false
+                    if (typed) "Typed it." else "I couldn't find a text field to type into."
+                }
             }
             is KateAction.ToggleTorch -> {
                 val turningOn = action.turnOn ?: !deviceControl.isTorchOn()
@@ -164,8 +176,6 @@ fun HomeScreen(
                 }
             }
             KateAction.Help -> responseGenerator.speechForHelp(tone)
-            KateAction.TypeText::class -> responseGenerator.speechForUnknown(tone) // placeholder path
-            is KateAction.TypeText -> responseGenerator.speechForUnknown(tone) // typing target UI not wired yet
             KateAction.Unknown -> responseGenerator.speechForUnknown(tone)
         }
 
@@ -173,47 +183,50 @@ fun HomeScreen(
         speak(reply)
     }
 
+    fun stopListeningAndProcess() {
+        if (!listenJobActive) return
+        listenJobActive = false
+        audioCapture.stop()
+        val finalText = voskManager.stopListening()
+        coroutineScope.launch {
+            handleQuery(finalText ?: "")
+        }
+    }
+
     fun startListening() {
         if (!micPermission.status.isGranted) {
             micPermission.launchPermissionRequest()
             return
         }
-        if (!voskReady) return
+        if (!voskReady || listenJobActive) return
 
         voskManager.startListening()
         kateState = KateState.LISTENING
+        listenJobActive = true
 
-        val timeoutSeconds = localSettings.getTimeoutSeconds()
-        var silenceTicks = 0
+        val maxDurationSeconds = localSettings.getTimeoutSeconds().coerceAtLeast(5)
+        var elapsedSeconds = 0
 
         audioCapture.start(coroutineScope) { chunk ->
-            voskManager.feedAudio(chunk)
-        }
-
-        coroutineScope.launch {
-            var lastSeenText = ""
-            while (kateState == KateState.LISTENING) {
-                delay(1000)
-                val current = voskManager.transcription.value
-                if (current == lastSeenText) {
-                    silenceTicks++
-                } else {
-                    silenceTicks = 0
-                    lastSeenText = current
-                }
-                if (silenceTicks >= timeoutSeconds) {
-                    stopListeningAndProcess()
-                    break
-                }
+            // feedAudio returns non-null exactly when Vosk's own endpoint
+            // detection decides the user finished a phrase - that's the
+            // real signal to stop, not a fixed timer.
+            val finalResult = voskManager.feedAudio(chunk)
+            if (finalResult != null && listenJobActive) {
+                stopListeningAndProcess()
             }
         }
-    }
 
-    fun stopListeningAndProcessInternal() {
-        audioCapture.stop()
-        val finalText = voskManager.stopListening()
+        // Safety backstop only - in case Vosk never finalizes (e.g.
+        // continuous background noise). Uses the Settings timeout value.
         coroutineScope.launch {
-            handleQuery(finalText ?: "")
+            while (listenJobActive && elapsedSeconds < maxDurationSeconds) {
+                delay(1000)
+                elapsedSeconds++
+            }
+            if (listenJobActive) {
+                stopListeningAndProcess()
+            }
         }
     }
 
@@ -299,10 +312,10 @@ fun HomeScreen(
                     .clip(CircleShape)
                     .background(if (kateState == KateState.LISTENING) LimeAccent else Purple70)
                     .then(
-                        Modifier.clickableSafe {
+                        androidx.compose.foundation.clickable {
                             when (kateState) {
                                 KateState.IDLE -> startListening()
-                                KateState.LISTENING -> stopListeningAndProcessInternal()
+                                KateState.LISTENING -> stopListeningAndProcess()
                                 else -> { /* busy */ }
                             }
                         }
@@ -327,7 +340,3 @@ fun HomeScreen(
         }
     }
 }
-
-// Small helper so onClick reads cleanly above without importing extra modifiers inline
-private fun Modifier.clickableSafe(onClick: () -> Unit): Modifier =
-    this.then(androidx.compose.foundation.clickable(onClick = onClick))
