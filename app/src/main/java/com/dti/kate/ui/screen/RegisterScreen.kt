@@ -1,5 +1,7 @@
 package com.dti.kate.ui.screen
 
+import android.content.Intent
+import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -20,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.dti.kate.R
+import com.dti.kate.service.KateForegroundService
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +34,8 @@ fun RegisterScreen(
     navController: NavController,
     viewModel: AuthViewModel = AuthViewModel(LocalContext.current),
 ) {
+    val context = LocalContext.current
+
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -146,6 +151,13 @@ fun RegisterScreen(
                     viewModel.register(email, password, fullName) { success, error ->
                         isLoading = false
                         if (success) {
+                            val serviceIntent = Intent(context, KateForegroundService::class.java)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(serviceIntent)
+                            } else {
+                                context.startService(serviceIntent)
+                            }
+
                             navController.navigate("home") {
                                 popUpTo("register") { inclusive = true }
                             }
