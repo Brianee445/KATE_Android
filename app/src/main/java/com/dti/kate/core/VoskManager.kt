@@ -96,7 +96,7 @@ class VoskManager(private val context: Context) {
         }
     }
 
-    /** Recursively copies assets/vosk-model/* to the given destination directory. */
+    /** Recursively copies the assets model directory to the given destination directory. */
     private fun copyAssetModelToInternalStorage(destDir: File): Boolean {
         return try {
             val assetFiles = context.assets.list(MODEL_DIR)
