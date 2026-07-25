@@ -40,8 +40,6 @@ fun KateNavHost(navController: NavHostController = rememberNavController()) {
     val isAuthenticated = repository.isAuthenticated()
     val startDestination = if (isAuthenticated) "home" else "splash"
 
-    // Kate's background service (charging-state speech, future always-on
-    // listening) should only run once the user is actually signed in.
     if (isAuthenticated) {
         val serviceIntent = Intent(context, KateForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -63,5 +61,7 @@ fun KateNavHost(navController: NavHostController = rememberNavController()) {
         composable("premium") { PremiumScreen(navController) }
         composable("payment_result") { PaymentResultScreen(navController) }
         composable("admin_dashboard") { AdminDashboardScreen(navController) }
+        composable("privacy_policy") { PrivacyPolicyScreen(navController) }
+        composable("terms_of_service") { TermsOfServiceScreen(navController) }
     }
 }
