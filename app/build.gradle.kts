@@ -7,7 +7,7 @@ import java.util.zip.ZipFile
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose) // required on Kotlin 2.0+ whenever compose = true
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.kapt)
@@ -24,12 +24,11 @@ android {
         versionCode = 5
         versionName = "1.0.4"
         multiDexEnabled = true
-buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.com/\"")
+        buildConfigField("String", "BACKEND_URL", "\"https://YOUR-BACKEND-URL-HERE.com/\"")
 
-        // ==================== NATIVE BUILD ====================
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17 -O2 -fno-rtti -fno-exceptions")
+                cppFlags("-std=c++17 -O2 -fno-rtti -fno-exceptions -Wl,-z,max-page-size=16384")
                 arguments(
                     "-DANDROID_PLATFORM=android-24",
                     "-DANDROID_ARM_NEON=TRUE",
@@ -38,13 +37,12 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
                 abiFilters += listOf("arm64-v8a", "armeabi-v7a")
             }
         }
-        
+
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
 
-    // ==================== EXTERNAL NATIVE BUILD ====================
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -52,7 +50,6 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
         }
     }
 
-    // ==================== SIGNING CONFIGS ====================
     signingConfigs {
         getByName("debug") {
             storeFile = file("debug.keystore")
@@ -60,7 +57,7 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
-        
+
         create("release") {
             storeFile = file(System.getenv("KEYSTORE_PATH") ?: "kate.jks")
             storePassword = System.getenv("KEY_STORE_PASSWORD") ?: ""
@@ -73,18 +70,11 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
         }
     }
 
-    // ==================== BUILD FEATURES ====================
     buildFeatures {
         compose = true
         buildConfig = true
     }
 
-    // NOTE: composeOptions { kotlinCompilerExtensionVersion = ... } removed.
-    // On Kotlin 2.0+, the org.jetbrains.kotlin.plugin.compose plugin (applied
-    // above) wires the correct Compose compiler version automatically — this
-    // block is what triggered "Compose Compiler Gradle plugin is required".
-
-    // ==================== COMPILE OPTIONS ====================
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -100,7 +90,6 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
         )
     }
 
-    // ==================== PACKAGING ====================
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -117,7 +106,6 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
         }
     }
 
-    // ==================== BUNDLE CONFIG (AAB) ====================
     bundle {
         language {
             enableSplit = false
@@ -130,7 +118,6 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
         }
     }
 
-    // ==================== BUILD TYPES ====================
     buildTypes {
         debug {
             isDebuggable = true
@@ -139,7 +126,7 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
-        
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -151,7 +138,6 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
         }
     }
 
-    // ==================== SOURCE SETS ====================
     sourceSets {
         getByName("main") {
             assets.srcDirs("src/main/assets")
@@ -162,7 +148,6 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
         }
     }
 
-    // ==================== TESTING ====================
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -170,9 +155,7 @@ buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.
     }
 }
 
-// ==================== DEPENDENCIES ====================
 dependencies {
-    // ==================== ANDROID CORE ====================
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -181,7 +164,6 @@ dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
     implementation("com.google.android.material:material:1.12.0")
 
-    // ==================== COMPOSE ====================
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling)
@@ -190,76 +172,61 @@ dependencies {
     implementation(libs.compose.material.icons)
     implementation(libs.compose.navigation)
 
-    // ==================== HILT ====================
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation)
     kapt(libs.hilt.compiler)
 
-    // ==================== COROUTINES ====================
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.core)
 
-    // ==================== ROOM ====================
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // ==================== DATASTORE ====================
     implementation(libs.datastore.preferences)
 
-    // ==================== SECURITY (Encrypted Preferences) ====================
     implementation(libs.security.crypto)
 
-    // ==================== NETWORKING ====================
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
 
-    // ==================== SUPABASE ====================
     implementation(libs.supabase.auth)
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.storage)
 
-    // ==================== ML / AI ====================
     implementation(libs.vosk.android)
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
 
-    // ==================== IMAGE LOADING ====================
     implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp) // Coil 3 needs this explicitly for network images
+    implementation(libs.coil.network.okhttp)
 
-    // ==================== ACCOMPANIST ====================
     implementation(libs.accompanist.permissions)
     implementation(libs.accompanist.systemui)
     implementation(libs.accompanist.navigation)
 
-    // ==================== TESTING ====================
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.espresso)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.androidx.test.ui)
 
-    // ==================== DEBUG ====================
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.androidx.test.manifest)
 }
 
-// ==================== KAPT ====================
 kapt {
     correctErrorTypes = true
 }
 
-// ==================== KSP ====================
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-// ==================== DOWNLOAD VOSK MODEL ====================
 tasks.register<DownloadVoskModelTask>("downloadVoskModel") {
     modelUrl = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
     modelDir = file("src/main/assets/vosk-model")
@@ -269,14 +236,13 @@ tasks.named("preBuild") {
     dependsOn("downloadVoskModel")
 }
 
-// ==================== CUSTOM TASK ====================
 abstract class DownloadVoskModelTask : DefaultTask() {
     @get:Input
     abstract val modelUrl: Property<String>
-    
+
     @get:OutputDirectory
     abstract val modelDir: DirectoryProperty
-    
+
     @TaskAction
     fun downloadAndExtract() {
         val destDir = modelDir.get().asFile
@@ -284,16 +250,16 @@ abstract class DownloadVoskModelTask : DefaultTask() {
             println("✅ Vosk model already exists, skipping download")
             return
         }
-        
+
         println("📥 Downloading Vosk model from ${modelUrl.get()}")
-        
+
         val zipFile = File(destDir.parentFile, "vosk-model.zip")
         URL(modelUrl.get()).openStream().use { input ->
             FileOutputStream(zipFile).use { output ->
                 input.copyTo(output)
             }
         }
-        
+
         println("📦 Extracting Vosk model...")
         ZipFile(zipFile).use { zip ->
             zip.entries().asSequence().forEach { entry ->
@@ -308,9 +274,9 @@ abstract class DownloadVoskModelTask : DefaultTask() {
                 }
             }
         }
-        
+
         zipFile.delete()
-        
+
         val modelFile = File(destDir, "am/final.mdl")
         if (modelFile.exists()) {
             println("✅ Vosk model downloaded successfully (${modelFile.length() / 1024 / 1024} MB)")
