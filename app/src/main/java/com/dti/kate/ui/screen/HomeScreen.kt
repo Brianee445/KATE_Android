@@ -227,6 +227,16 @@ fun HomeScreen(
         }
     }
 
+    // Fires when a background wake gesture (Raise/Shake) is detected -
+    // auto-starts listening if Kate is idle and ready.
+    LaunchedEffect(Unit) {
+        KateWakeSignal.events.collect {
+            if (voskReady && kateState == KateState.IDLE) {
+                startListening()
+            }
+        }
+    }
+
     Scaffold(
         modifier = Modifier.background(Background),
         containerColor = Background,
