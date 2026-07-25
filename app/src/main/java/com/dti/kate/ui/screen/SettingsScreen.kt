@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.dti.kate.BuildConfig
+import com.dti.kate.core.LocalSettingsStore
 import com.dti.kate.repository.Repository
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
