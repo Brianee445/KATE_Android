@@ -10,7 +10,6 @@ import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.net.URL
 import java.util.zip.ZipFile
 
@@ -48,21 +47,14 @@ class VoskManager(private val context: Context) {
             _status.value = VoskStatus.Initializing
             Log.d(TAG, "Initializing Vosk...")
 
-            val modelPath = getModelPath()
+            val modelPath = ensureModelAvailable()
             if (modelPath == null) {
-                Log.e(TAG, "Model not found. Downloading...")
-                downloadModel()
-                val newPath = getModelPath()
-                if (newPath == null) {
-                    _status.value = VoskStatus.Error
-                    callback(false)
-                    return@withContext
-                }
-                model = Model(newPath)
-            } else {
-                model = Model(modelPath)
+                _status.value = VoskStatus.Error
+                callback(false)
+                return@withContext
             }
 
+            model = Model(modelPath)
             recognizer = Recognizer(model, 16000.0f)
             _status.value = VoskStatus.Ready
             Log.d(TAG, "Vosk initialized successfully")
@@ -75,98 +67,119 @@ class VoskManager(private val context: Context) {
         }
     }
 
-    private fun getModelPath(): String? {
-        val assetModelDir = File(context.filesDir, MODEL_DIR)
-        if (assetModelDir.exists()) {
-            val modelFile = File(assetModelDir, "am/final.mdl")
-            if (modelFile.exists()) {
-                Log.d(TAG, "Model found in assets: ${assetModelDir.absolutePath}")
-                return assetModelDir.absolutePath
-            }
-        }
-
+    /**
+     * Returns a real filesystem path to the model, copying it out of
+     * assets on first run if needed. Falls back to a network download
+     * only if the model isn't bundled in assets at all.
+     */
+    private suspend fun ensureModelAvailable(): String? = withContext(Dispatchers.IO) {
         val internalModelDir = File(context.filesDir, MODEL_DIR)
-        if (internalModelDir.exists()) {
-            val modelFile = File(internalModelDir, "am/final.mdl")
-            if (modelFile.exists()) {
-                Log.d(TAG, "Model found in internal storage: ${internalModelDir.absolutePath}")
-                return internalModelDir.absolutePath
-            }
+        val internalModelFile = File(internalModelDir, "am/final.mdl")
+        if (internalModelFile.exists()) {
+            Log.d(TAG, "Model already present in internal storage")
+            return@withContext internalModelDir.absolutePath
         }
 
-        val cacheModelDir = File(context.cacheDir, MODEL_DIR)
-        if (cacheModelDir.exists()) {
-            val modelFile = File(cacheModelDir, "am/final.mdl")
-            if (modelFile.exists()) {
-                Log.d(TAG, "Model found in cache: ${cacheModelDir.absolutePath}")
-                return cacheModelDir.absolutePath
-            }
+        val copiedFromAssets = copyAssetModelToInternalStorage(internalModelDir)
+        if (copiedFromAssets) {
+            Log.d(TAG, "Copied bundled model from assets to internal storage")
+            return@withContext internalModelDir.absolutePath
         }
 
-        return null
+        Log.w(TAG, "Model not bundled in assets, attempting network download")
+        return@withContext try {
+            downloadModel(internalModelDir)
+            internalModelDir.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Network model download failed", e)
+            null
+        }
     }
 
-    private suspend fun downloadModel() = withContext(Dispatchers.IO) {
-        try {
-            _status.value = VoskStatus.LoadingModel
-            Log.d(TAG, "Downloading Vosk model...")
+    /** Recursively copies assets/vosk-model/* to the given destination directory. */
+    private fun copyAssetModelToInternalStorage(destDir: File): Boolean {
+        return try {
+            val assetFiles = context.assets.list(MODEL_DIR)
+            if (assetFiles.isNullOrEmpty()) return false
 
-            val destDir = File(context.filesDir, MODEL_DIR)
             destDir.mkdirs()
+            copyAssetDirRecursive(MODEL_DIR, destDir)
 
-            val zipFile = File(destDir, ZIP_NAME)
+            File(destDir, "am/final.mdl").exists()
+        } catch (e: Exception) {
+            Log.w(TAG, "No bundled model found in assets: ${e.message}")
+            false
+        }
+    }
 
-            val inputStream: InputStream? = try {
-                context.assets.open("$MODEL_DIR/$ZIP_NAME")
-            } catch (e: Exception) {
-                Log.w(TAG, "Model not in assets, downloading from network")
-                null
-            }
+    private fun copyAssetDirRecursive(assetPath: String, targetDir: File) {
+        val entries = context.assets.list(assetPath) ?: return
 
-            if (inputStream != null) {
-                FileOutputStream(zipFile).use { output ->
-                    inputStream.copyTo(output)
+        if (entries.isEmpty()) {
+            // It's a file, not a directory
+            targetDir.parentFile?.mkdirs()
+            context.assets.open(assetPath).use { input ->
+                FileOutputStream(targetDir).use { output ->
+                    input.copyTo(output)
                 }
-            } else {
-                val url = "https://alphacephei.com/vosk/models/$ZIP_NAME"
-                URL(url).openStream().use { input ->
-                    FileOutputStream(zipFile).use { output ->
+            }
+            return
+        }
+
+        targetDir.mkdirs()
+        for (entry in entries) {
+            val childAssetPath = "$assetPath/$entry"
+            val childTarget = File(targetDir, entry)
+            val childEntries = context.assets.list(childAssetPath)
+            if (childEntries.isNullOrEmpty()) {
+                context.assets.open(childAssetPath).use { input ->
+                    FileOutputStream(childTarget).use { output ->
                         input.copyTo(output)
                     }
                 }
+            } else {
+                copyAssetDirRecursive(childAssetPath, childTarget)
             }
+        }
+    }
 
-            Log.d(TAG, "Extracting Vosk model...")
-            ZipFile(zipFile).use { zip ->
-                zip.entries().asSequence().forEach { entry ->
-                    if (!entry.isDirectory) {
-                        val targetFile = File(destDir, entry.name)
-                        targetFile.parentFile?.mkdirs()
-                        zip.getInputStream(entry).use { input ->
-                            FileOutputStream(targetFile).use { output ->
-                                input.copyTo(output)
-                            }
+    private fun downloadModel(destDir: File) {
+        _status.value = VoskStatus.LoadingModel
+        Log.d(TAG, "Downloading Vosk model from network...")
+
+        destDir.mkdirs()
+        val zipFile = File(destDir.parentFile, ZIP_NAME)
+
+        val url = "https://alphacephei.com/vosk/models/$ZIP_NAME"
+        URL(url).openStream().use { input ->
+            FileOutputStream(zipFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+
+        Log.d(TAG, "Extracting Vosk model...")
+        ZipFile(zipFile).use { zip ->
+            zip.entries().asSequence().forEach { entry ->
+                if (!entry.isDirectory) {
+                    val targetFile = File(destDir, entry.name)
+                    targetFile.parentFile?.mkdirs()
+                    zip.getInputStream(entry).use { input ->
+                        FileOutputStream(targetFile).use { output ->
+                            input.copyTo(output)
                         }
                     }
                 }
             }
-
-            zipFile.delete()
-
-            val modelFile = File(destDir, "am/final.mdl")
-            if (modelFile.exists()) {
-                Log.d(TAG, "✅ Vosk model downloaded successfully")
-            } else {
-                throw Exception("Model file not found after extraction")
-            }
-
-            _status.value = VoskStatus.Ready
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to download Vosk model", e)
-            _status.value = VoskStatus.Error
-            throw e
         }
+
+        zipFile.delete()
+
+        val modelFile = File(destDir, "am/final.mdl")
+        if (!modelFile.exists()) {
+            throw Exception("Model file not found after extraction")
+        }
+        Log.d(TAG, "✅ Vosk model downloaded successfully")
+        _status.value = VoskStatus.Ready
     }
 
     fun startListening(): Boolean {
@@ -175,13 +188,11 @@ class VoskManager(private val context: Context) {
                 Log.e(TAG, "Vosk not initialized")
                 return false
             }
-
             recognizer?.reset()
             _isListening.value = true
             _transcription.value = ""
             Log.d(TAG, "Started listening")
             true
-
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start listening", e)
             false
@@ -205,7 +216,6 @@ class VoskManager(private val context: Context) {
                 }
                 null
             }
-
         } catch (e: Exception) {
             Log.e(TAG, "Failed to process audio", e)
             null
@@ -220,7 +230,6 @@ class VoskManager(private val context: Context) {
             _transcription.value = finalText
             Log.d(TAG, "Stopped listening. Final: $finalText")
             finalText
-
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop listening", e)
             null
@@ -229,21 +238,19 @@ class VoskManager(private val context: Context) {
 
     private fun parseVoskResult(result: String?): String {
         if (result.isNullOrEmpty()) return ""
-        try {
-            val json = org.json.JSONObject(result)
-            return json.optString("text", "")
+        return try {
+            org.json.JSONObject(result).optString("text", "")
         } catch (e: Exception) {
-            return ""
+            ""
         }
     }
 
     private fun parseVoskPartial(result: String?): String {
         if (result.isNullOrEmpty()) return ""
-        try {
-            val json = org.json.JSONObject(result)
-            return json.optString("partial", "")
+        return try {
+            org.json.JSONObject(result).optString("partial", "")
         } catch (e: Exception) {
-            return ""
+            ""
         }
     }
 
