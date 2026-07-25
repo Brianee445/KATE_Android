@@ -1,6 +1,8 @@
 package com.dti.kate.ui.screen
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import com.dti.kate.BuildConfig
 import com.dti.kate.core.LocalSettingsStore
@@ -25,8 +28,10 @@ import com.dti.kate.repository.Repository
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 
-// Data classes
 data class WakeTrigger(
     val id: String,
     val label: String,
@@ -39,12 +44,7 @@ data class SettingsState(
     val timeoutSeconds: Int = 10,
     val offlineMode: Boolean = false,
     val syncTraining: Boolean = true,
-    val wakeTriggers: List<WakeTrigger> = listOf(
-        WakeTrigger("raise", "Raise to Wake", "Raise phone to activate Kate", true),
-        WakeTrigger("double_tap", "Double Tap", "Double tap screen", false),
-        WakeTrigger("shake", "Shake", "Shake device", false),
-        WakeTrigger("button", "Home Button", "Press home button", false),
-    ),
+    val wakeTriggers: List<WakeTrigger> = emptyList(),
 )
 
 data class SettingsUser(
@@ -53,7 +53,7 @@ data class SettingsUser(
     val tier: String = "free",
 )
 
-class SettingsViewModel(context: Context) {
+class SettingsViewModel(private val context: Context) {
 
     private val repository = Repository(context.applicationContext)
     private val localStore = LocalSettingsStore(context)
@@ -63,6 +63,10 @@ class SettingsViewModel(context: Context) {
             toneLevel = localStore.getToneLevel(),
             timeoutSeconds = localStore.getTimeoutSeconds(),
             offlineMode = localStore.getOfflineMode(),
+            wakeTriggers = listOf(
+                WakeTrigger("raise", "Raise to Wake", "Raise your phone to activate Kate", localStore.getRaiseToWakeEnabled()),
+                WakeTrigger("shake", "Shake", "Shake your phone to activate Kate", localStore.getShakeEnabled()),
+            ),
         )
     )
     val settings = _settings
@@ -75,6 +79,9 @@ class SettingsViewModel(context: Context) {
 
     private val _errorMessage = mutableStateOf<String?>(null)
     val errorMessage = _errorMessage
+
+    private val _actionMessage = mutableStateOf<String?>(null)
+    val actionMessage = _actionMessage
 
     suspend fun loadProfile() {
         _isLoading.value = true
@@ -98,12 +105,9 @@ class SettingsViewModel(context: Context) {
     suspend fun toggleSyncTraining() {
         val newValue = !_settings.value.syncTraining
         _settings.value = _settings.value.copy(syncTraining = newValue)
-
         repository.updateProfile(syncTraining = newValue).fold(
             onSuccess = { },
-            onFailure = {
-                _settings.value = _settings.value.copy(syncTraining = !newValue)
-            },
+            onFailure = { _settings.value = _settings.value.copy(syncTraining = !newValue) },
         )
     }
 
@@ -112,6 +116,11 @@ class SettingsViewModel(context: Context) {
             if (it.id == id) it.copy(enabled = !it.enabled) else it
         }
         _settings.value = settings.value.copy(wakeTriggers = newTriggers)
+
+        val raise = newTriggers.firstOrNull { it.id == "raise" }?.enabled ?: true
+        val shake = newTriggers.firstOrNull { it.id == "shake" }?.enabled ?: false
+        localStore.setRaiseToWakeEnabled(raise)
+        localStore.setShakeEnabled(shake)
     }
 
     fun updateTone(value: Float) {
@@ -130,8 +139,60 @@ class SettingsViewModel(context: Context) {
         localStore.setOfflineMode(newValue)
     }
 
-    fun clearLocalData() {}
-    fun exportData() {}
+    fun clearLocalData() {
+        try {
+            context.cacheDir.deleteRecursively()
+            localStore.resetToDefaults()
+            _actionMessage.value = "Local data cleared"
+        } catch (e: Exception) {
+            _actionMessage.value = "Failed to clear local data"
+        }
+    }
+
+    suspend fun exportData(): Intent? {
+        return repository.getChatHistory(limit = 1000).fold(
+            onSuccess = { history ->
+                try {
+                    val jsonArray = JSONArray()
+                    history.conversations.forEach { conv ->
+                        val obj = JSONObject()
+                        obj.put("query", conv.query)
+                        obj.put("response", conv.response)
+                        obj.put("intent", conv.intent)
+                        obj.put("createdAt", conv.createdAt)
+                        jsonArray.put(obj)
+                    }
+
+                    val exportDir = File(context.cacheDir, "exports")
+                    exportDir.mkdirs()
+                    val file = File(exportDir, "kate_conversations.json")
+                    file.writeText(jsonArray.toString(2))
+
+                    val uri = FileProvider.getUriForFile(
+                        context, "${BuildConfig.APPLICATION_ID}.fileprovider", file
+                    )
+
+                    _actionMessage.value = null
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "application/json"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                } catch (e: Exception) {
+                    _actionMessage.value = "Failed to prepare export"
+                    null
+                }
+            },
+            onFailure = {
+                _actionMessage.value = "Failed to fetch conversation history"
+                null
+            },
+        )
+    }
+
+    fun clearActionMessage() {
+        _actionMessage.value = null
+    }
 
     suspend fun signOut(): Boolean {
         return repository.logout().fold(
@@ -149,14 +210,35 @@ fun SettingsScreen(
     navController: NavController,
     viewModel: SettingsViewModel = SettingsViewModel(LocalContext.current),
 ) {
+    val context = LocalContext.current
     val settings by viewModel.settings
     val user by viewModel.user
     val isLoading by viewModel.isLoading
     val errorMessage by viewModel.errorMessage
+    val actionMessage by viewModel.actionMessage
     val coroutineScope = rememberCoroutineScope()
+
+    var showClearConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.loadProfile()
+    }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("Clear local data?") },
+            text = { Text("This clears cached files and resets your local settings on this device. It doesn't delete your account or server-side conversation history.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearLocalData()
+                    showClearConfirm = false
+                }) { Text("Clear", color = Error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") }
+            },
+        )
     }
 
     Scaffold(
@@ -202,12 +284,12 @@ fun SettingsScreen(
         ) {
             errorMessage?.let { message ->
                 item {
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Error,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
+                    Text(text = message, style = MaterialTheme.typography.bodySmall, color = Error, modifier = Modifier.padding(vertical = 8.dp))
+                }
+            }
+            actionMessage?.let { message ->
+                item {
+                    Text(text = message, style = MaterialTheme.typography.bodySmall, color = LimeAccent, modifier = Modifier.padding(vertical = 8.dp))
                 }
             }
 
@@ -232,27 +314,16 @@ fun SettingsScreen(
                     shape = KateShape.MD,
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Tone: ${(settings.toneLevel * 100).toInt()}% Sass",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary,
-                        )
+                        Text(text = "Tone: ${(settings.toneLevel * 100).toInt()}% Sass", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
                         Slider(
                             value = settings.toneLevel,
                             onValueChange = { viewModel.updateTone(it) },
                             valueRange = 0f..1f,
                             steps = 4,
-                            colors = SliderDefaults.colors(
-                                thumbColor = Purple70,
-                                activeTrackColor = Purple70,
-                                inactiveTrackColor = Divider,
-                            ),
+                            colors = SliderDefaults.colors(thumbColor = Purple70, activeTrackColor = Purple70, inactiveTrackColor = Divider),
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Professional", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                             Text("Balanced", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                             Text("Maximum Sass", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
@@ -269,27 +340,16 @@ fun SettingsScreen(
                     shape = KateShape.MD,
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Timeout: ${settings.timeoutSeconds}s",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary,
-                        )
+                        Text(text = "Timeout: ${settings.timeoutSeconds}s", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
                         Slider(
                             value = settings.timeoutSeconds.toFloat(),
                             onValueChange = { viewModel.updateTimeout(it.toInt()) },
                             valueRange = 5f..30f,
                             steps = 5,
-                            colors = SliderDefaults.colors(
-                                thumbColor = Purple70,
-                                activeTrackColor = Purple70,
-                                inactiveTrackColor = Divider,
-                            ),
+                            colors = SliderDefaults.colors(thumbColor = Purple70, activeTrackColor = Purple70, inactiveTrackColor = Divider),
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("5s", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                             Text("15s", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                             Text("30s", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
@@ -318,8 +378,8 @@ fun SettingsScreen(
             item {
                 SettingsButtonItem(
                     title = "Clear Local Data",
-                    description = "Remove all cached conversations and data",
-                    onClick = { viewModel.clearLocalData() },
+                    description = "Remove cached files and reset local settings on this device",
+                    onClick = { showClearConfirm = true },
                     color = Error,
                 )
             }
@@ -327,7 +387,14 @@ fun SettingsScreen(
                 SettingsButtonItem(
                     title = "Export Data",
                     description = "Download all your conversations",
-                    onClick = { viewModel.exportData() },
+                    onClick = {
+                        coroutineScope.launch {
+                            val shareIntent = viewModel.exportData()
+                            shareIntent?.let {
+                                context.startActivity(Intent.createChooser(it, "Export conversations"))
+                            }
+                        }
+                    },
                 )
             }
 
@@ -339,20 +406,12 @@ fun SettingsScreen(
                     shape = KateShape.MD,
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Kate Assistant v${BuildConfig.VERSION_NAME}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary,
-                        )
-                        Text(
-                            text = "A D.T.I Company",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                        )
+                        Text(text = "Kate Assistant v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                        Text(text = "A D.T.I Company", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            KateTextButton(text = "Privacy Policy", onClick = {})
-                            KateTextButton(text = "Terms of Service", onClick = {})
+                            KateTextButton(text = "Privacy Policy", onClick = { navController.navigate("privacy_policy") })
+                            KateTextButton(text = "Terms of Service", onClick = { navController.navigate("terms_of_service") })
                         }
                     }
                 }
@@ -365,9 +424,7 @@ fun SettingsScreen(
                     onClick = {
                         coroutineScope.launch {
                             viewModel.signOut()
-                            navController.navigate("login") {
-                                popUpTo(0)
-                            }
+                            navController.navigate("login") { popUpTo(0) }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -379,7 +436,6 @@ fun SettingsScreen(
     }
 }
 
-// ---- Helper composables ----
 @Composable
 private fun ProfileCard(user: SettingsUser) {
     Card(
@@ -388,24 +444,12 @@ private fun ProfileCard(user: SettingsUser) {
         shape = KateShape.MD,
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(Purple70.copy(alpha = 0.2f)),
+                modifier = Modifier.size(56.dp).clip(CircleShape).background(Purple70.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = user.fullName.firstOrNull()?.uppercase() ?: "U",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Purple70,
-                )
+                Text(text = user.fullName.firstOrNull()?.uppercase() ?: "U", style = MaterialTheme.typography.titleLarge, color = Purple70)
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -447,30 +491,15 @@ private fun TierCard(tier: String, onUpgrade: () -> Unit) {
             shape = KateShape.MD,
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
-                    Text(
-                        text = "💎 Unlock Premium",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary,
-                    )
-                    Text(
-                        text = "Get unlimited cloud requests & more",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                    )
+                    Text(text = "💎 Unlock Premium", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                    Text(text = "Get unlimited cloud requests & more", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                 }
-                KateButton(
-                    text = "Upgrade",
-                    onClick = onUpgrade,
-                    type = KateButtonType.Accent,
-                    size = KateButtonSize.Small,
-                )
+                KateButton(text = "Upgrade", onClick = onUpgrade, type = KateButtonType.Accent, size = KateButtonSize.Small)
             }
         }
     }
@@ -480,31 +509,20 @@ private fun TierCard(tier: String, onUpgrade: () -> Unit) {
 private fun SettingsSectionHeader(title: String) {
     Text(
         text = title,
-        style = MaterialTheme.typography.titleSmall.copy(
-            fontWeight = FontWeight.Bold,
-            color = TextSecondary,
-        ),
+        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = TextSecondary),
         modifier = Modifier.padding(vertical = 8.dp),
     )
 }
 
 @Composable
-private fun SettingsSwitchItem(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: () -> Unit,
-) {
+private fun SettingsSwitchItem(title: String, description: String, checked: Boolean, onCheckedChange: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = KateShape.MD,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onCheckedChange() }
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().clickable { onCheckedChange() }.padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -527,22 +545,14 @@ private fun SettingsSwitchItem(
 }
 
 @Composable
-private fun SettingsButtonItem(
-    title: String,
-    description: String,
-    onClick: () -> Unit,
-    color: Color = TextPrimary,
-) {
+private fun SettingsButtonItem(title: String, description: String, onClick: () -> Unit, color: Color = TextPrimary) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = KateShape.MD,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onClick() }
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
