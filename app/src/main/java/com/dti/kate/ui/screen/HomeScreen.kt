@@ -3,6 +3,7 @@ package com.dti.kate.ui.screen
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -24,6 +25,7 @@ import com.dti.kate.core.*
 import com.dti.kate.service.KateAccessibilityService
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
+import com.dti.kate.utils.DeviceControlManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -208,17 +210,12 @@ fun HomeScreen(
         var elapsedSeconds = 0
 
         audioCapture.start(coroutineScope) { chunk ->
-            // feedAudio returns non-null exactly when Vosk's own endpoint
-            // detection decides the user finished a phrase - that's the
-            // real signal to stop, not a fixed timer.
             val finalResult = voskManager.feedAudio(chunk)
             if (finalResult != null && listenJobActive) {
                 stopListeningAndProcess()
             }
         }
 
-        // Safety backstop only - in case Vosk never finalizes (e.g.
-        // continuous background noise). Uses the Settings timeout value.
         coroutineScope.launch {
             while (listenJobActive && elapsedSeconds < maxDurationSeconds) {
                 delay(1000)
@@ -311,15 +308,13 @@ fun HomeScreen(
                     .size(96.dp)
                     .clip(CircleShape)
                     .background(if (kateState == KateState.LISTENING) LimeAccent else Purple70)
-                    .then(
-                        androidx.compose.foundation.clickable {
-                            when (kateState) {
-                                KateState.IDLE -> startListening()
-                                KateState.LISTENING -> stopListeningAndProcess()
-                                else -> { /* busy */ }
-                            }
+                    .clickable {
+                        when (kateState) {
+                            KateState.IDLE -> startListening()
+                            KateState.LISTENING -> stopListeningAndProcess()
+                            else -> { /* busy */ }
                         }
-                    ),
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
