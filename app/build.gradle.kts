@@ -43,6 +43,19 @@ android {
         }
     }
 
+    // Produces one installable APK per ABI (plus a universal fallback)
+    // from a single `./gradlew assembleRelease` run - so both 32-bit and
+    // 64-bit devices can be tested directly without relying on Play
+    // Store's dynamic delivery.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = true
+        }
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -101,6 +114,7 @@ android {
         jniLibs {
             useLegacyPackaging = false
             pickFirsts += "**/libvosk.so"
+            pickFirsts += "**/libjnidispatch.so"
             pickFirsts += "**/libtensorflowlite_c.so"
             pickFirsts += "**/libc++_shared.so"
         }
@@ -198,6 +212,12 @@ dependencies {
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.storage)
 
+    // Explicit @aar classifier ensures Gradle resolves JNA's properly
+    // packaged Android artifact (with per-ABI native libraries bundled),
+    // rather than potentially resolving a plain/desktop JNA variant that
+    // lacks Android native binaries - matches Alphacep's own official
+    // vosk-android-demo dependency declaration.
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
     implementation(libs.vosk.android)
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
