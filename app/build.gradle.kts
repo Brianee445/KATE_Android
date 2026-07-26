@@ -113,7 +113,6 @@ android {
         }
         jniLibs {
             useLegacyPackaging = false
-            pickFirsts += "**/libvosk.so"
             pickFirsts += "**/libjnidispatch.so"
             pickFirsts += "**/libtensorflowlite_c.so"
             pickFirsts += "**/libc++_shared.so"
@@ -156,7 +155,6 @@ android {
         getByName("main") {
             assets.srcDirs("src/main/assets")
             jniLibs.srcDirs(
-                "src/main/cpp/third_party/vosk/lib",
                 "src/main/cpp/third_party/tflite/lib"
             )
         }
