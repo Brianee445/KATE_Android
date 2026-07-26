@@ -24,7 +24,7 @@ android {
         versionCode = 5
         versionName = "1.0.4"
         multiDexEnabled = true
-        buildConfigField("String", "BACKEND_URL", "\"https://YOUR-BACKEND-URL-HERE.com/\"")
+        buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.com/\"")
 
         externalNativeBuild {
             cmake {
