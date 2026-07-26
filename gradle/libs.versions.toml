@@ -35,8 +35,8 @@ okhttp             = "4.12.0"
 supabase           = "3.1.2"
 
 # ==================== ML / AI ====================
-vosk               = "0.3.70"
-tensorflow-lite    = "2.17.0"
+vosk               = "0.3.75"
+tensorflow-lite    = "5.18.1"
 # NOTE: tensorflow-lite-support uses its own independent version scheme —
 # it never had a "2.17.0" release (that's the tensorflow-lite core scheme).
 # Latest available is 0.5.0. Also note this artifact is deprecated upstream,
@@ -124,6 +124,7 @@ accompanist-navigation = { group = "com.google.accompanist", name = "accompanist
 
 # ==================== TESTING ====================
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 androidx-test-ext = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test" }
 androidx-test-espresso = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
 androidx-test-ui = { group = "androidx.compose.ui", name = "ui-test-junit4" }
