@@ -37,7 +37,7 @@ supabase           = "3.1.2"
 # ==================== ML / AI ====================
 vosk               = "0.3.75"
 jna                = "5.18.1"
-tensorflow-lite    = "5.14.0"
+tensorflow-lite    = "2.17.0"
 # NOTE: tensorflow-lite-support uses its own independent version scheme —
 # it never had a "2.17.0" release (that's the tensorflow-lite core scheme).
 # Latest available is 0.5.0. Also note this artifact is deprecated upstream,
