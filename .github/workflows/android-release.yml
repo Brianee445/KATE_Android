@@ -130,14 +130,15 @@ jobs:
       # ==================== VERIFY ====================
       - name: Verify artifacts
         run: |
-          echo "=== APK ==="
+          echo "=== APK(s) ==="
           ls -la app/build/outputs/apk/release/ || echo "APK not found"
           echo "=== AAB ==="
           ls -la app/build/outputs/bundle/release/ || echo "AAB not found"
-          echo "=== Native libraries in APK ==="
-          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            unzip -l app/build/outputs/apk/release/app-release.apk | grep "\.so" | head -10 || echo "No .so files found"
-          fi
+          echo "=== Native libraries per APK ==="
+          for apk in app/build/outputs/apk/release/*.apk; do
+            echo "--- $apk ---"
+            unzip -l "$apk" | grep "\.so" || echo "No .so files found in $apk"
+          done
 
       # ==================== UPLOAD ====================
       - name: Upload signed APK
