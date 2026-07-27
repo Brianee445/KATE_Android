@@ -6,13 +6,36 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
-import org.vosk.Model
-import org.vosk.Recognizer
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
 import java.util.zip.ZipFile
 
+/**
+ * Speech-to-text manager.
+ *
+ * Backed by Kate's own native engine (kate_engine.so via [NativeBridge]) —
+ * NOT the third-party org.vosk / JNA Java bindings that this class used to
+ * wrap.
+ *
+ * Why the switch: org.vosk.LibVosk binds its *entire* declared native API
+ * surface atomically the first time org.vosk.Model/Recognizer is touched
+ * (JNA's Native.register() resolves every method in one shot in a static
+ * initializer). If even one declared symbol - e.g.
+ * vosk_recognizer_set_endpointer_delays - is missing from whatever
+ * libvosk.so the vosk-android AAR happens to bundle, construction throws
+ * UnsatisfiedLinkError every single time, regardless of whether we ever
+ * call that function. This reproduced identically across the vosk-android
+ * 0.3.70 and 0.3.75 releases, so it isn't a one-off publishing glitch we
+ * can dodge with a version pin - it's inherent to depending on the AAR's
+ * all-or-nothing JNA binding at all.
+ *
+ * Our own NativeBridge (app/src/main/cpp/jni/native_bridge.cpp ->
+ * kate_engine.so -> vosk_wrapper.cpp) only declares and links against the
+ * handful of Vosk C functions we actually use, so it can't fail this way -
+ * and it's already the JNI bridge the rest of the app (KateResponseGenerator)
+ * is built around, so this also removes a redundant, duplicate STT stack.
+ */
 class VoskManager(private val context: Context) {
 
     companion object {
@@ -22,8 +45,7 @@ class VoskManager(private val context: Context) {
         private const val ZIP_NAME = "$MODEL_NAME.zip"
     }
 
-    private var model: Model? = null
-    private var recognizer: Recognizer? = null
+    private val bridge = NativeBridge()
 
     private val _status = MutableStateFlow<VoskStatus>(VoskStatus.NotInitialized)
     val status: StateFlow<VoskStatus> = _status
@@ -34,6 +56,14 @@ class VoskManager(private val context: Context) {
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening
 
+    // Set synchronously by the native callback (same call stack as feedAudio/
+    // stopListening, since the native engine calls back before returning -
+    // see vosk_wrapper.cpp's feedAudio, which invokes the result callback
+    // inline rather than off a separate thread). Consumed and cleared by
+    // whichever Kotlin call triggered it.
+    @Volatile
+    private var pendingFinalText: String? = null
+
     sealed class VoskStatus {
         object NotInitialized : VoskStatus()
         object Initializing : VoskStatus()
@@ -42,28 +72,106 @@ class VoskManager(private val context: Context) {
         object LoadingModel : VoskStatus()
     }
 
+    private val nativeCallbacks = object : NativeBridge.Callbacks {
+        override fun onTranscription(text: String, isFinal: Boolean) {
+            _transcription.value = text
+            if (isFinal) {
+                pendingFinalText = text
+            }
+        }
+
+        override fun onResponse(response: String) {
+            // Not used for plain STT - Kate's response generation is driven
+            // from Kotlin (KateResponseGenerator) once a final transcript
+            // comes back from here, not from the native engine's own
+            // response pipeline.
+        }
+
+        override fun onError(error: String) {
+            Log.e(TAG, "Native engine error: $error")
+        }
+
+        override fun onStateChange(state: Int) {
+            // Native EngineState enum -> Kotlin VoskStatus isn't a clean 1:1
+            // mapping and nothing currently reads it beyond Ready/Error/
+            // Initializing, which we already set explicitly around
+            // initialize(). Left as a hook for later if that changes.
+        }
+    }
+
     suspend fun initialize(callback: (Boolean) -> Unit) = withContext(Dispatchers.IO) {
         try {
             _status.value = VoskStatus.Initializing
-            Log.d(TAG, "Initializing Vosk...")
+            Log.d(TAG, "Initializing native speech engine...")
 
-            val modelPath = ensureModelAvailable()
-            if (modelPath == null) {
+            val modelDirPath = ensureModelAvailable()
+            if (modelDirPath == null) {
                 _status.value = VoskStatus.Error
                 callback(false)
                 return@withContext
             }
 
-            model = Model(modelPath)
-            recognizer = Recognizer(model, 16000.0f)
-            _status.value = VoskStatus.Ready
-            Log.d(TAG, "Vosk initialized successfully")
-            callback(true)
+            // KateEngine::initialize() appends "/vosk-model" to whatever root
+            // path it's given, so we hand it the *parent* of the model
+            // directory ensureModelAvailable() just prepared.
+            val modelRootPath = File(modelDirPath).parentFile?.absolutePath
+                ?: context.filesDir.absolutePath
+
+            val configDir = File(context.filesDir, "config").apply { mkdirs() }
+
+            bridge.setCallbacks(nativeCallbacks)
+            val ok = bridge.initializeEngine(modelRootPath, configDir.absolutePath)
+
+            _status.value = if (ok) VoskStatus.Ready else VoskStatus.Error
+            Log.d(TAG, if (ok) "Native engine initialized successfully" else "Native engine failed to initialize")
+            callback(ok)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Vosk initialization failed", e)
+            Log.e(TAG, "Native engine initialization failed", e)
             _status.value = VoskStatus.Error
             callback(false)
+        }
+    }
+
+    fun startListening(): Boolean {
+        pendingFinalText = null
+        _transcription.value = ""
+        val started = bridge.startListening()
+        _isListening.value = started
+        if (!started) {
+            Log.e(TAG, "Native engine refused to start listening (not initialized?)")
+        }
+        return started
+    }
+
+    /** Feeds a chunk of PCM16 mono audio. Returns the final transcript if this chunk completed one, else null. */
+    fun feedAudio(audioData: ByteArray): String? {
+        if (!_isListening.value) return null
+        return try {
+            bridge.feedAudio(audioData)
+            val final = pendingFinalText
+            if (final != null) pendingFinalText = null
+            final
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to process audio", e)
+            null
+        }
+    }
+
+    fun stopListening(): String? {
+        return try {
+            bridge.stopListening()
+            _isListening.value = false
+            // Prefer a final result the callback already delivered; fall back
+            // to whatever partial transcript is on screen so the user's
+            // words aren't silently dropped if Vosk never finalized in time.
+            val result = pendingFinalText ?: _transcription.value.takeIf { it.isNotBlank() }
+            pendingFinalText = null
+            Log.d(TAG, "Stopped listening. Final: $result")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to stop listening", e)
+            null
         }
     }
 
@@ -180,91 +288,5 @@ class VoskManager(private val context: Context) {
         }
         Log.d(TAG, "✅ Vosk model downloaded successfully")
         _status.value = VoskStatus.Ready
-    }
-
-    fun startListening(): Boolean {
-        return try {
-            if (recognizer == null || model == null) {
-                Log.e(TAG, "Vosk not initialized")
-                return false
-            }
-            recognizer?.reset()
-            _isListening.value = true
-            _transcription.value = ""
-            Log.d(TAG, "Started listening")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start listening", e)
-            false
-        }
-    }
-
-    fun feedAudio(audioData: ByteArray): String? {
-        return try {
-            if (!_isListening.value) return null
-
-            if (recognizer?.acceptWaveForm(audioData, audioData.size) == true) {
-                val result = recognizer?.result
-                val transcription = parseVoskResult(result)
-                _transcription.value = transcription
-                transcription
-            } else {
-                val partial = recognizer?.partialResult
-                val partialText = parseVoskPartial(partial)
-                if (partialText.isNotEmpty()) {
-                    _transcription.value = partialText
-                }
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to process audio", e)
-            null
-        }
-    }
-
-    fun stopListening(): String? {
-        return try {
-            _isListening.value = false
-            val finalResult = recognizer?.finalResult
-            val finalText = parseVoskResult(finalResult)
-            _transcription.value = finalText
-            Log.d(TAG, "Stopped listening. Final: $finalText")
-            finalText
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to stop listening", e)
-            null
-        }
-    }
-
-    private fun parseVoskResult(result: String?): String {
-        if (result.isNullOrEmpty()) return ""
-        return try {
-            org.json.JSONObject(result).optString("text", "")
-        } catch (e: Exception) {
-            ""
-        }
-    }
-
-    private fun parseVoskPartial(result: String?): String {
-        if (result.isNullOrEmpty()) return ""
-        return try {
-            org.json.JSONObject(result).optString("partial", "")
-        } catch (e: Exception) {
-            ""
-        }
-    }
-
-    fun reset() {
-        recognizer?.reset()
-        _transcription.value = ""
-        Log.d(TAG, "Vosk reset")
-    }
-
-    fun shutdown() {
-        recognizer?.close()
-        model?.close()
-        _isListening.value = false
-        _status.value = VoskStatus.NotInitialized
-        Log.d(TAG, "Vosk shutdown")
     }
 }
