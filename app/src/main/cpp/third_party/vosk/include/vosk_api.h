@@ -95,13 +95,31 @@ void vosk_recognizer_free(VoskRecognizer* recognizer);
 void vosk_recognizer_reset(VoskRecognizer* recognizer);
 
 /**
- * Feed audio data to recognizer
+ * Feed audio data to recognizer (raw bytes)
  * @param recognizer VoskRecognizer handle
- * @param data PCM audio data (int16_t)
- * @param length Number of samples (not bytes!)
+ * @param data PCM audio data as raw bytes
+ * @param length Number of bytes
  * @return 1 if final result is available, 0 otherwise
  */
-int vosk_recognizer_accept_waveform(VoskRecognizer* recognizer, const int16_t* data, size_t length);
+int vosk_recognizer_accept_waveform(VoskRecognizer* recognizer, const char* data, int length);
+
+/**
+ * Feed audio data to recognizer (16-bit signed samples)
+ * @param recognizer VoskRecognizer handle
+ * @param data PCM audio data (int16_t)
+ * @param length Number of samples (not bytes)
+ * @return 1 if final result is available, 0 otherwise
+ */
+int vosk_recognizer_accept_waveform_s(VoskRecognizer* recognizer, const int16_t* data, int length);
+
+/**
+ * Feed audio data to recognizer (32-bit float samples)
+ * @param recognizer VoskRecognizer handle
+ * @param data PCM audio data (float)
+ * @param length Number of samples (not bytes)
+ * @return 1 if final result is available, 0 otherwise
+ */
+int vosk_recognizer_accept_waveform_f(VoskRecognizer* recognizer, const float* data, int length);
 
 /**
  * Get partial result (interim transcription)
