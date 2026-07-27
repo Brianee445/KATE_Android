@@ -113,7 +113,6 @@ android {
         }
         jniLibs {
             useLegacyPackaging = false
-            pickFirsts += "**/libjnidispatch.so"
             pickFirsts += "**/libtensorflowlite_c.so"
             pickFirsts += "**/libc++_shared.so"
         }
@@ -155,7 +154,14 @@ android {
         getByName("main") {
             assets.srcDirs("src/main/assets")
             jniLibs.srcDirs(
-                "src/main/cpp/third_party/tflite/lib"
+                "src/main/cpp/third_party/tflite/lib",
+                // kate_engine.so dynamically links against libvosk.so (passed
+                // straight to the linker in CMakeLists.txt, not statically
+                // embedded) - without packaging it here too, the APK ships
+                // kate_engine.so with an unresolved DT_NEEDED dependency and
+                // System.loadLibrary("kate_engine") fails at runtime even
+                // though the build compiles and links cleanly.
+                "src/main/cpp/third_party/vosk/lib"
             )
         }
     }
@@ -210,13 +216,9 @@ dependencies {
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.storage)
 
-    // Explicit @aar classifier ensures Gradle resolves JNA's properly
-    // packaged Android artifact (with per-ABI native libraries bundled),
-    // rather than potentially resolving a plain/desktop JNA variant that
-    // lacks Android native binaries - matches Alphacep's own official
-    // vosk-android-demo dependency declaration.
-    implementation("net.java.dev.jna:jna:5.18.1@aar")
-    implementation(libs.vosk.android)
+    // vosk-android / JNA removed: VoskManager now talks to Kate's own
+    // native engine (kate_engine.so via NativeBridge) instead of the
+    // third-party org.vosk JNA bindings. See VoskManager.kt for why.
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
 
