@@ -21,11 +21,15 @@ endif()
 message("Building for architecture: ${ARCH}")
 
 # ==================== VOSK ====================
-# Check if Vosk library exists, if not create placeholder
+# Fail the configure step immediately if the real Vosk library is missing.
+# (Previously this silently wrote a text file containing "placeholder" in its
+# place, which let the build limp all the way to the link step before failing
+# with a cryptic "unexpected EOF" linker error. Fail loud, fail early instead.)
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/third_party/vosk/lib/${ARCH}/libvosk.so")
-    message(WARNING "Vosk library not found for ${ARCH}, creating placeholder...")
-    file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/vosk/lib/${ARCH}")
-    file(WRITE "${CMAKE_SOURCE_DIR}/third_party/vosk/lib/${ARCH}/libvosk.so" "placeholder")
+    message(FATAL_ERROR
+        "libvosk.so not found for ${ARCH} at "
+        "${CMAKE_SOURCE_DIR}/third_party/vosk/lib/${ARCH}/libvosk.so — "
+        "run the Vosk download step (or scripts/download_third_party.sh locally) before building.")
 endif()
 
 add_library(vosk SHARED IMPORTED)
