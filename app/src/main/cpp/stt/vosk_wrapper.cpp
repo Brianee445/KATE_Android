@@ -107,7 +107,7 @@ void VoskWrapper::feedAudio(const int16_t* data, size_t samples) {
     std::lock_guard<std::mutex> lock(m_mutex);
     
     // Feed audio to Vosk
-    int result = vosk_recognizer_accept_waveform(m_recognizer, data, samples);
+    int result = vosk_recognizer_accept_waveform_s(m_recognizer, data, static_cast<int>(samples));
     
     if (result == 1) {
         // Final result available
