@@ -21,44 +21,52 @@ jobs:
       - name: Set up Android NDK
         uses: android-actions/setup-android@v3
 
-      # ==================== DOWNLOAD VOSK LIBRARIES (FIXED) ====================
+      # ==================== DOWNLOAD VOSK LIBRARIES (pulled from the real Maven Central AAR) ====================
       - name: Download Vosk libraries
         run: |
-          echo "📥 Downloading Vosk libraries..."
-          
-          # Create directories
+          set -e
+          echo "📥 Downloading Vosk native libraries from Maven Central..."
+
           mkdir -p app/src/main/cpp/third_party/vosk/lib/arm64-v8a
           mkdir -p app/src/main/cpp/third_party/vosk/lib/armeabi-v7a
           mkdir -p app/src/main/cpp/third_party/vosk/include
-          
-          # Download Vosk
-          curl -L -o /tmp/vosk.zip "https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-android-0.3.45.zip"
-          unzip -q /tmp/vosk.zip -d /tmp/vosk/
-          
-          # The zip structure is: aarch64/, armeabi-v7a/, x86_64/, x86/
-          # Copy from the correct paths
-          if [ -f "/tmp/vosk/aarch64/libvosk.so" ]; then
-            cp /tmp/vosk/aarch64/libvosk.so app/src/main/cpp/third_party/vosk/lib/arm64-v8a/
-            echo "  ✅ arm64-v8a: /tmp/vosk/aarch64/libvosk.so"
+
+          VOSK_VERSION="0.3.75"
+          AAR_URL="https://repo1.maven.org/maven2/com/alphacephei/vosk-android/${VOSK_VERSION}/vosk-android-${VOSK_VERSION}.aar"
+
+          curl -fL -o /tmp/vosk-android.aar "$AAR_URL"
+          mkdir -p /tmp/vosk-aar
+          unzip -q /tmp/vosk-android.aar -d /tmp/vosk-aar/
+
+          echo "📁 AAR contents (jni folder):"
+          find /tmp/vosk-aar/jni -type f 2>/dev/null || echo "  ⚠️ No jni folder found in AAR"
+
+          if [ -f "/tmp/vosk-aar/jni/arm64-v8a/libvosk.so" ]; then
+            cp /tmp/vosk-aar/jni/arm64-v8a/libvosk.so app/src/main/cpp/third_party/vosk/lib/arm64-v8a/
+            echo "  ✅ arm64-v8a libvosk.so copied"
+          else
+            echo "  ❌ arm64-v8a/libvosk.so not found in AAR"
+            exit 1
           fi
-          
-          if [ -f "/tmp/vosk/armeabi-v7a/libvosk.so" ]; then
-            cp /tmp/vosk/armeabi-v7a/libvosk.so app/src/main/cpp/third_party/vosk/lib/armeabi-v7a/
-            echo "  ✅ armeabi-v7a: /tmp/vosk/armeabi-v7a/libvosk.so"
+
+          if [ -f "/tmp/vosk-aar/jni/armeabi-v7a/libvosk.so" ]; then
+            cp /tmp/vosk-aar/jni/armeabi-v7a/libvosk.so app/src/main/cpp/third_party/vosk/lib/armeabi-v7a/
+            echo "  ✅ armeabi-v7a libvosk.so copied"
+          else
+            echo "  ❌ armeabi-v7a/libvosk.so not found in AAR"
+            exit 1
           fi
-          
-          # Copy header
-          if [ -f "/tmp/vosk/src/vosk_api.h" ]; then
-            cp /tmp/vosk/src/vosk_api.h app/src/main/cpp/third_party/vosk/include/
-            echo "  ✅ Header: /tmp/vosk/src/vosk_api.h"
-          fi
-          
-          # Verify files exist
+
+          # vosk_api.h isn't bundled in the AAR (Java/Kotlin consumers don't
+          # need the C header) - fetch it directly from the vosk-api source repo.
+          curl -fL -o app/src/main/cpp/third_party/vosk/include/vosk_api.h \
+            "https://raw.githubusercontent.com/alphacep/vosk-api/v${VOSK_VERSION}/src/vosk_api.h"
+
           echo ""
-          echo "📁 Verification:"
-          ls -la app/src/main/cpp/third_party/vosk/lib/arm64-v8a/ || echo "  ⚠️ arm64-v8a directory empty"
-          ls -la app/src/main/cpp/third_party/vosk/lib/armeabi-v7a/ || echo "  ⚠️ armeabi-v7a directory empty"
-          ls -la app/src/main/cpp/third_party/vosk/include/ || echo "  ⚠️ include directory empty"
+          echo "📁 Final verification:"
+          ls -la app/src/main/cpp/third_party/vosk/lib/arm64-v8a/
+          ls -la app/src/main/cpp/third_party/vosk/lib/armeabi-v7a/
+          ls -la app/src/main/cpp/third_party/vosk/include/
 
       # ==================== DOWNLOAD THIRD-PARTY LIBS (TFLite + JSON) ====================
       - name: Download third-party libraries
