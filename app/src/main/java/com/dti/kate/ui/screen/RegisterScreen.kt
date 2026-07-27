@@ -1,7 +1,10 @@
 package com.dti.kate.ui.screen
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -151,11 +154,17 @@ fun RegisterScreen(
                     viewModel.register(email, password, fullName) { success, error ->
                         isLoading = false
                         if (success) {
-                            val serviceIntent = Intent(context, KateForegroundService::class.java)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                context.startForegroundService(serviceIntent)
-                            } else {
-                                context.startService(serviceIntent)
+                            val hasMicPermission = ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+
+                            if (hasMicPermission) {
+                                val serviceIntent = Intent(context, KateForegroundService::class.java)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    context.startForegroundService(serviceIntent)
+                                } else {
+                                    context.startService(serviceIntent)
+                                }
                             }
 
                             navController.navigate("home") {
