@@ -1,7 +1,10 @@
 package com.dti.kate.ui.screen
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -140,11 +143,24 @@ fun LoginScreen(
                             // Start Kate's background service (charging-state
                             // speech, future always-on listening) right away
                             // rather than waiting for the next app launch.
-                            val serviceIntent = Intent(context, KateForegroundService::class.java)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                context.startForegroundService(serviceIntent)
-                            } else {
-                                context.startService(serviceIntent)
+                            //
+                            // Only do this if RECORD_AUDIO is already granted —
+                            // starting a microphone-type foreground service
+                            // without it throws a SecurityException on API 34+.
+                            // If it's not granted yet, HomeScreen's existing
+                            // permission flow will request it and can start
+                            // the service itself once the user grants it.
+                            val hasMicPermission = ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+
+                            if (hasMicPermission) {
+                                val serviceIntent = Intent(context, KateForegroundService::class.java)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    context.startForegroundService(serviceIntent)
+                                } else {
+                                    context.startService(serviceIntent)
+                                }
                             }
 
                             navController.navigate("home") {
