@@ -211,7 +211,7 @@ fun HomeScreen(
         val maxDurationSeconds = localSettings.getTimeoutSeconds().coerceAtLeast(5)
         var elapsedSeconds = 0
 
-        audioCapture.start(coroutineScope) { chunk ->
+        audioCapture.start(context, coroutineScope) { chunk ->
             val finalResult = voskManager.feedAudio(chunk)
             if (finalResult != null && listenJobActive) {
                 stopListeningAndProcess()
