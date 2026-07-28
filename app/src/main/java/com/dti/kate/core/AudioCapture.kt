@@ -30,7 +30,13 @@ class AudioCapture {
         if (minBufferSize <= 0) return false
 
         val record = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            // VOICE_RECOGNITION is OEM-tuned - Android makes no guarantee
+            // about its gain staging, and on this device (TECNO/Transsion)
+            // it was measured producing audio at ~1-6% of full scale
+            // (RMS ~65, peak ~130-500 out of 32767), i.e. noise-floor level,
+            // even during active speech. MIC is the raw/unprocessed source
+            // and isn't subject to that vendor-specific DSP tuning.
+            MediaRecorder.AudioSource.MIC,
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
