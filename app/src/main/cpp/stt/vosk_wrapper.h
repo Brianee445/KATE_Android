@@ -52,6 +52,12 @@ private:
     // Config
     int m_sampleRate = 16000;
     std::string m_modelPath;
+
+    // Diagnostic: counts feedAudio() calls so we can periodically surface
+    // the raw Vosk JSON (even when empty) up to the persistent Kotlin-side
+    // debug log, since native LOGD/LOGI get evicted by this device's noisy
+    // OEM logcat before a bug report can be pulled.
+    size_t m_feedCount = 0;
     
     // Callbacks
     TranscriptionCallback m_callback;
