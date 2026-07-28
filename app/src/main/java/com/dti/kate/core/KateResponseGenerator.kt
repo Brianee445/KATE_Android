@@ -240,6 +240,15 @@ class KateResponseGenerator {
         KateTone.SASSY -> listOf("I have no idea what that means, but go off.", "That one lost me completely.")
     })
 
+    // Used when listening ended with no recognized speech at all (silence,
+    // mic didn't pick anything up) - distinct from speechForUnknown, which
+    // is for speech that WAS heard but didn't match any known command.
+    fun speechForNoSpeech(tone: KateTone): String = pick("no_speech.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I didn't hear anything. Please try again.", "No speech detected - go ahead and try again.")
+        KateTone.BALANCED -> listOf("Didn't catch that - I didn't hear anything.", "I didn't hear you there, try again?")
+        KateTone.SASSY -> listOf("...silence. Try actually saying something.", "Cricket noises over here. Try again?")
+    })
+
     // ==================== CHARGING EVENTS (used in Batch 4) ====================
 
     fun speechForChargerConnected(tone: KateTone): String = pick("charge_in.$tone", when (tone) {
