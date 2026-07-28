@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import com.dti.kate.BuildConfig
+import com.dti.kate.core.DebugLog
 import com.dti.kate.core.LocalSettingsStore
 import com.dti.kate.repository.Repository
 import com.dti.kate.ui.components.*
@@ -146,6 +147,15 @@ class SettingsViewModel(private val context: Context) {
             _actionMessage.value = "Local data cleared"
         } catch (e: Exception) {
             _actionMessage.value = "Failed to clear local data"
+        }
+    }
+
+    fun exportDebugLog(): Intent? {
+        return try {
+            DebugLog.exportShareIntent(context)
+        } catch (e: Exception) {
+            _actionMessage.value = "Failed to export debug log"
+            null
         }
     }
 
@@ -393,6 +403,18 @@ fun SettingsScreen(
                             shareIntent?.let {
                                 context.startActivity(Intent.createChooser(it, "Export conversations"))
                             }
+                        }
+                    },
+                )
+            }
+            item {
+                SettingsButtonItem(
+                    title = "Export Debug Log",
+                    description = "Share diagnostic logs for the voice engine (for troubleshooting)",
+                    onClick = {
+                        val shareIntent = viewModel.exportDebugLog()
+                        if (shareIntent != null) {
+                            context.startActivity(Intent.createChooser(shareIntent, "Export debug log"))
                         }
                     },
                 )
