@@ -95,13 +95,15 @@ fun HomeScreen(
     }
 
     suspend fun handleQuery(query: String) {
+        val tone = toneFromSlider(localSettings.getToneLevel())
+
         if (query.isBlank()) {
             kateState = KateState.IDLE
+            speak(responseGenerator.speechForNoSpeech(tone))
             return
         }
 
         kateState = KateState.PROCESSING
-        val tone = toneFromSlider(localSettings.getToneLevel())
 
         val action = responseGenerator.classify(query)
         val reply: String = when (action) {
