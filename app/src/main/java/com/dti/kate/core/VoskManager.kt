@@ -74,6 +74,7 @@ class VoskManager(private val context: Context) {
 
     private val nativeCallbacks = object : NativeBridge.Callbacks {
         override fun onTranscription(text: String, isFinal: Boolean) {
+            DebugLog.log(context, TAG, "onTranscription(isFinal=$isFinal, len=${text.length}): \"$text\"")
             _transcription.value = text
             if (isFinal) {
                 pendingFinalText = text
@@ -89,13 +90,11 @@ class VoskManager(private val context: Context) {
 
         override fun onError(error: String) {
             Log.e(TAG, "Native engine error: $error")
+            DebugLog.log(context, TAG, "onError: $error")
         }
 
         override fun onStateChange(state: Int) {
-            // Native EngineState enum -> Kotlin VoskStatus isn't a clean 1:1
-            // mapping and nothing currently reads it beyond Ready/Error/
-            // Initializing, which we already set explicitly around
-            // initialize(). Left as a hook for later if that changes.
+            DebugLog.log(context, TAG, "onStateChange: $state")
         }
     }
 
@@ -103,10 +102,12 @@ class VoskManager(private val context: Context) {
         try {
             _status.value = VoskStatus.Initializing
             Log.d(TAG, "Initializing native speech engine...")
+            DebugLog.log(context, TAG, "initialize() start")
 
             val modelDirPath = ensureModelAvailable()
             if (modelDirPath == null) {
                 _status.value = VoskStatus.Error
+                DebugLog.log(context, TAG, "initialize() FAILED: no model available (assets copy and network download both failed)")
                 callback(false)
                 return@withContext
             }
@@ -118,26 +119,33 @@ class VoskManager(private val context: Context) {
                 ?: context.filesDir.absolutePath
 
             val configDir = File(context.filesDir, "config").apply { mkdirs() }
+            DebugLog.log(context, TAG, "modelRootPath=$modelRootPath configDir=${configDir.absolutePath}")
 
             bridge.setCallbacks(nativeCallbacks)
             val ok = bridge.initializeEngine(modelRootPath, configDir.absolutePath)
 
             _status.value = if (ok) VoskStatus.Ready else VoskStatus.Error
             Log.d(TAG, if (ok) "Native engine initialized successfully" else "Native engine failed to initialize")
+            DebugLog.log(context, TAG, "bridge.initializeEngine() returned $ok")
             callback(ok)
 
         } catch (e: Exception) {
             Log.e(TAG, "Native engine initialization failed", e)
+            DebugLog.log(context, TAG, "initialize() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}")
             _status.value = VoskStatus.Error
             callback(false)
         }
     }
 
+    private var chunkCount = 0
+
     fun startListening(): Boolean {
         pendingFinalText = null
         _transcription.value = ""
+        chunkCount = 0
         val started = bridge.startListening()
         _isListening.value = started
+        DebugLog.log(context, TAG, "startListening() -> $started")
         if (!started) {
             Log.e(TAG, "Native engine refused to start listening (not initialized?)")
         }
@@ -148,12 +156,17 @@ class VoskManager(private val context: Context) {
     fun feedAudio(audioData: ByteArray): String? {
         if (!_isListening.value) return null
         return try {
+            chunkCount++
+            if (chunkCount == 1 || chunkCount % 25 == 0) {
+                DebugLog.log(context, TAG, "feedAudio() chunk #$chunkCount, ${audioData.size} bytes")
+            }
             bridge.feedAudio(audioData)
             val final = pendingFinalText
             if (final != null) pendingFinalText = null
             final
         } catch (e: Exception) {
             Log.e(TAG, "Failed to process audio", e)
+            DebugLog.log(context, TAG, "feedAudio() EXCEPTION at chunk #$chunkCount: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }
@@ -168,9 +181,11 @@ class VoskManager(private val context: Context) {
             val result = pendingFinalText ?: _transcription.value.takeIf { it.isNotBlank() }
             pendingFinalText = null
             Log.d(TAG, "Stopped listening. Final: $result")
+            DebugLog.log(context, TAG, "stopListening() -> chunks fed=$chunkCount, result=${result?.let { "\"$it\"" } ?: "null"}")
             result
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop listening", e)
+            DebugLog.log(context, TAG, "stopListening() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }
@@ -185,21 +200,26 @@ class VoskManager(private val context: Context) {
         val internalModelFile = File(internalModelDir, "am/final.mdl")
         if (internalModelFile.exists()) {
             Log.d(TAG, "Model already present in internal storage")
+            DebugLog.log(context, TAG, "ensureModelAvailable(): cached model found, am/final.mdl=${internalModelFile.length()} bytes")
             return@withContext internalModelDir.absolutePath
         }
 
         val copiedFromAssets = copyAssetModelToInternalStorage(internalModelDir)
         if (copiedFromAssets) {
             Log.d(TAG, "Copied bundled model from assets to internal storage")
+            DebugLog.log(context, TAG, "ensureModelAvailable(): copied from assets, am/final.mdl=${internalModelFile.length()} bytes")
             return@withContext internalModelDir.absolutePath
         }
 
         Log.w(TAG, "Model not bundled in assets, attempting network download")
+        DebugLog.log(context, TAG, "ensureModelAvailable(): no bundled model in assets, attempting network download")
         return@withContext try {
             downloadModel(internalModelDir)
+            DebugLog.log(context, TAG, "ensureModelAvailable(): download succeeded, am/final.mdl=${internalModelFile.length()} bytes")
             internalModelDir.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Network model download failed", e)
+            DebugLog.log(context, TAG, "ensureModelAvailable(): download FAILED: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }
