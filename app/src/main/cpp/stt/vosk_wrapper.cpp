@@ -148,12 +148,27 @@ void VoskWrapper::stopListening() {
 
 void VoskWrapper::feedAudio(const int16_t* data, size_t samples) {
     if (!m_listening || !m_recognizer) return;
-    
+
     std::lock_guard<std::mutex> lock(m_mutex);
-    
+
+    ++m_feedCount;
+    const bool logThisCall = (m_feedCount == 1 || m_feedCount % 25 == 0);
+
     // Feed audio to Vosk
     int result = vosk_recognizer_accept_waveform_s(m_recognizer, data, static_cast<int>(samples));
-    
+
+    if (result == -1) {
+        // Vosk hit an internal exception processing this chunk - previously
+        // this was silently treated the same as "no result yet" (result 0),
+        // which would hide a real decoding failure behind what looks like
+        // ordinary silence.
+        LOGE("vosk_recognizer_accept_waveform_s returned -1 (internal error) at feed #%zu", m_feedCount);
+        if (m_callback) {
+            m_callback("[DIAG] accept_waveform_s returned -1 (error) at feed #" + std::to_string(m_feedCount), false);
+        }
+        return;
+    }
+
     if (result == 1) {
         // Final result available
         const char* json = vosk_recognizer_result(m_recognizer);
@@ -161,6 +176,8 @@ void VoskWrapper::feedAudio(const int16_t* data, size_t samples) {
             std::string text = extractJsonField(json, "text");
             if (!text.empty()) {
                 m_callback(text, true);
+            } else if (logThisCall) {
+                m_callback("[DIAG] final result but empty text, raw=" + std::string(json), false);
             }
         }
     } else {
@@ -170,6 +187,8 @@ void VoskWrapper::feedAudio(const int16_t* data, size_t samples) {
             std::string text = extractJsonField(partial, "partial");
             if (!text.empty()) {
                 m_callback(text, false);
+            } else if (logThisCall) {
+                m_callback("[DIAG] partial empty, raw=" + std::string(partial), false);
             }
         }
     }
