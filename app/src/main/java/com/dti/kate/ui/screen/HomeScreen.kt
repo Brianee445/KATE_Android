@@ -230,12 +230,35 @@ fun HomeScreen(
     }
 
     // Fires when a background wake gesture (Raise/Shake) is detected -
-    // auto-starts listening if Kate is idle and ready.
+    // auto-starts listening once Kate is idle and ready.
+    //
+    // Two race conditions handled here, both specific to cold starts
+    // (app wasn't already open when the gesture fired):
+    //  1. KateWakeSignal now replays its last event, so a collector that
+    //     subscribes *after* the emission (e.g. HomeScreen composing after
+    //     KateForegroundService's startActivity() call queues a fresh
+    //     launch) still receives it - previously it was emitted into an
+    //     empty flow and lost.
+    //  2. Even with the replay, voskReady may still be false at the exact
+    //     moment this LaunchedEffect first sees the token (native engine
+    //     init is still running). A plain `.collect { if (voskReady) ... }`
+    //     would see that single delivery, find voskReady false, and drop
+    //     the wake request on the floor. Tracking the token as state and
+    //     re-evaluating whenever voskReady/kateState change means we act
+    //     on it the moment the engine actually becomes ready instead.
+    var pendingWakeToken by remember { mutableLongStateOf(0L) }
+    var lastHandledWakeToken by remember { mutableLongStateOf(0L) }
+
     LaunchedEffect(Unit) {
-        KateWakeSignal.events.collect {
-            if (voskReady && kateState == KateState.IDLE) {
-                startListening()
-            }
+        KateWakeSignal.events.collect { token ->
+            pendingWakeToken = token
+        }
+    }
+
+    LaunchedEffect(pendingWakeToken, voskReady, kateState) {
+        if (pendingWakeToken != lastHandledWakeToken && voskReady && kateState == KateState.IDLE) {
+            lastHandledWakeToken = pendingWakeToken
+            startListening()
         }
     }
 
