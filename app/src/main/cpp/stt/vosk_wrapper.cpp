@@ -11,6 +11,49 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+namespace {
+
+// Vosk's C API returns JSON strings like {"text" : "hello world"} for final
+// results and {"partial" : "hello"} for partials - never plain text. This
+// extracts a single string field from that flat JSON shape without pulling
+// in a full JSON dependency, since Vosk's Android output never nests beyond
+// one level for these two fields.
+std::string extractJsonField(const std::string& json, const std::string& key) {
+    const std::string needle = "\"" + key + "\"";
+    size_t keyPos = json.find(needle);
+    if (keyPos == std::string::npos) return "";
+
+    size_t colonPos = json.find(':', keyPos + needle.size());
+    if (colonPos == std::string::npos) return "";
+
+    size_t firstQuote = json.find('"', colonPos + 1);
+    if (firstQuote == std::string::npos) return "";
+
+    std::string value;
+    value.reserve(32);
+    for (size_t i = firstQuote + 1; i < json.size(); ++i) {
+        char c = json[i];
+        if (c == '\\' && i + 1 < json.size()) {
+            char next = json[i + 1];
+            switch (next) {
+                case '"':  value += '"';  break;
+                case '\\': value += '\\'; break;
+                case 'n':  value += '\n'; break;
+                case 't':  value += '\t'; break;
+                default:   value += next; break;
+            }
+            ++i;
+        } else if (c == '"') {
+            break;
+        } else {
+            value += c;
+        }
+    }
+    return value;
+}
+
+} // namespace
+
 namespace kate {
 
 VoskWrapper::VoskWrapper() = default;
@@ -94,8 +137,10 @@ void VoskWrapper::stopListening() {
     // Get final result - use vosk_recognizer_result, not final_result
     const char* result = vosk_recognizer_result(m_recognizer);
     if (result && m_callback) {
-        std::string text = result;
-        m_callback(text, true);
+        std::string text = extractJsonField(result, "text");
+        if (!text.empty()) {
+            m_callback(text, true);
+        }
     }
     
     LOGI("Stopped listening");
@@ -113,13 +158,19 @@ void VoskWrapper::feedAudio(const int16_t* data, size_t samples) {
         // Final result available
         const char* json = vosk_recognizer_result(m_recognizer);
         if (json && m_callback) {
-            m_callback(json, true);
+            std::string text = extractJsonField(json, "text");
+            if (!text.empty()) {
+                m_callback(text, true);
+            }
         }
     } else {
         // Partial result
         const char* partial = vosk_recognizer_partial_result(m_recognizer);
         if (partial && m_callback) {
-            m_callback(partial, false);
+            std::string text = extractJsonField(partial, "partial");
+            if (!text.empty()) {
+                m_callback(text, false);
+            }
         }
     }
 }
