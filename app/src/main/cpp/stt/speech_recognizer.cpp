@@ -108,19 +108,21 @@ void SpeechRecognizer::reset() {
 }
 
 void SpeechRecognizer::processResult(const std::string& result, bool isFinal) {
-    std::string text;
-    float confidence = 0.0f;
-    
-    parseVoskResult(result, text, confidence);
-    
-    if (text.empty()) return;
-    
+    // VoskWrapper (see vosk_wrapper.cpp) already extracts plain text out of
+    // Vosk's raw {"text":...}/{"partial":...} JSON before invoking this
+    // callback - `result` here is already plain text, not JSON. This used
+    // to re-run parseVoskResult() on it looking for a "text" JSON key,
+    // which obviously never matched plain text, so `text` came out empty
+    // and every result (including diagnostic [DIAG]-tagged messages) was
+    // silently dropped right here, one layer above where the bug looked
+    // like it lived.
+    if (result.empty()) return;
+
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_currentText = text;
-    m_confidence = confidence;
-    
+    m_currentText = result;
+
     if (m_callback) {
-        m_callback(text, isFinal);
+        m_callback(result, isFinal);
     }
 }
 
