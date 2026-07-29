@@ -36,6 +36,7 @@ supabase           = "3.1.2"
 
 # ==================== ML / AI ====================
 jna                = "5.18.1"
+vosk               = "0.3.47"
 tensorflow-lite    = "2.17.0"
 # NOTE: tensorflow-lite-support uses its own independent version scheme —
 # it never had a "2.17.0" release (that's the tensorflow-lite core scheme).
@@ -107,6 +108,7 @@ supabase-storage = { group = "io.github.jan-tennert.supabase", name = "storage-k
 
 # ==================== ML / AI ====================
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
+vosk-android = { group = "com.alphacephei", name = "vosk-android", version.ref = "vosk" }
 tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflow-lite" }
 tensorflow-lite-support = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "tensorflow-lite-support" }
 
