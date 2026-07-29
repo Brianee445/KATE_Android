@@ -113,6 +113,7 @@ android {
         }
         jniLibs {
             useLegacyPackaging = false
+            pickFirsts += "**/libjnidispatch.so"
             pickFirsts += "**/libtensorflowlite_c.so"
             pickFirsts += "**/libc++_shared.so"
         }
@@ -216,9 +217,17 @@ dependencies {
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.storage)
 
-    // vosk-android / JNA removed: VoskManager now talks to Kate's own
-    // native engine (kate_engine.so via NativeBridge) instead of the
-    // third-party org.vosk JNA bindings. See VoskManager.kt for why.
+    // vosk-android 0.3.47 pinned deliberately: this is the last release
+    // before a ~2.5 year gap in upstream releases (0.3.47 -> dormant ->
+    // 0.3.70/0.3.75). We tried 0.3.75 and 0.3.70 earlier and both crashed
+    // with UnsatisfiedLinkError (vosk_recognizer_set_endpointer_delays
+    // undefined symbol) - the Java bindings and bundled native .so were
+    // out of sync in those releases. 0.3.47 is confirmed working in a
+    // sibling Kate project with no such crash. The @aar classifier ensures
+    // Gradle resolves JNA's Android artifact (with per-ABI native libs),
+    // not a desktop-only variant.
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
+    implementation(libs.vosk.android)
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
 
