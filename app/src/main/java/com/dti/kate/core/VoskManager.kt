@@ -6,35 +6,51 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import org.vosk.Model
+import org.vosk.Recognizer
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
+import java.util.concurrent.locks.ReentrantLock
 import java.util.zip.ZipFile
+import kotlin.concurrent.withLock
 
 /**
  * Speech-to-text manager.
  *
- * Backed by Kate's own native engine (kate_engine.so via [NativeBridge]) —
- * NOT the third-party org.vosk / JNA Java bindings that this class used to
- * wrap.
+ * Backed by the official org.vosk (JNA) bindings, pinned to vosk-android
+ * 0.3.47 - NOT Kate's custom C++ engine (kate_engine.so), which this class
+ * used to route through.
  *
- * Why the switch: org.vosk.LibVosk binds its *entire* declared native API
- * surface atomically the first time org.vosk.Model/Recognizer is touched
- * (JNA's Native.register() resolves every method in one shot in a static
- * initializer). If even one declared symbol - e.g.
- * vosk_recognizer_set_endpointer_delays - is missing from whatever
- * libvosk.so the vosk-android AAR happens to bundle, construction throws
- * UnsatisfiedLinkError every single time, regardless of whether we ever
- * call that function. This reproduced identically across the vosk-android
- * 0.3.70 and 0.3.75 releases, so it isn't a one-off publishing glitch we
- * can dodge with a version pin - it's inherent to depending on the AAR's
- * all-or-nothing JNA binding at all.
+ * Why the switch back: the custom engine's native pipeline passed every
+ * structural check we could find - model loaded, engine initialized,
+ * states transitioned correctly, JNI callbacks proven working via
+ * onStateChange - and yet consistently produced zero transcriptions on
+ * clearly speech-level audio, across several rounds of fixing real bugs
+ * in that pipeline (a JSON double-parsing bug, the original JSON
+ * extraction bug, audio source/gain). The remaining failure was never
+ * isolated.
  *
- * Our own NativeBridge (app/src/main/cpp/jni/native_bridge.cpp ->
- * kate_engine.so -> vosk_wrapper.cpp) only declares and links against the
- * handful of Vosk C functions we actually use, so it can't fail this way -
- * and it's already the JNI bridge the rest of the app (KateResponseGenerator)
- * is built around, so this also removes a redundant, duplicate STT stack.
+ * Meanwhile a sibling Kate project (different package name, same org)
+ * uses org.vosk directly and works correctly - its only documented bug
+ * was a thread-safety race (SIGSEGV from two threads touching the
+ * non-thread-safe Recognizer at once), never a recognition failure. That
+ * project pins vosk-android 0.3.47, which is the last release before a
+ * ~2.5 year gap in upstream releases. We'd previously hit
+ * UnsatisfiedLinkError (vosk_recognizer_set_endpointer_delays undefined
+ * symbol) on 0.3.75 and 0.3.70 - both from *after* that gap, where the
+ * Java bindings and bundled native .so were evidently out of sync - and
+ * concluded org.vosk was unusable here without ever trying 0.3.47
+ * specifically. It avoids that crash.
+ *
+ * This port keeps that project's two real fixes:
+ *  - recognizerLock (ReentrantLock) around every native Vosk call, since
+ *    libvosk.so's Recognizer is not thread-safe and our feedAudio() runs
+ *    on AudioCapture's IO-dispatcher thread while stopListening() can be
+ *    triggered from a different (UI/coroutine) thread.
+ *  - Stricter model validation (am/ AND conf/ subdirectories present),
+ *    not just a single file's existence.
  */
 class VoskManager(private val context: Context) {
 
@@ -43,9 +59,15 @@ class VoskManager(private val context: Context) {
         private const val MODEL_DIR = "vosk-model"
         private const val MODEL_NAME = "vosk-model-small-en-us-0.15"
         private const val ZIP_NAME = "$MODEL_NAME.zip"
+        private const val SAMPLE_RATE = 16000f
     }
 
-    private val bridge = NativeBridge()
+    private var model: Model? = null
+    private var recognizer: Recognizer? = null
+
+    // All native Vosk calls (acceptWaveForm, result, partialResult, reset,
+    // close) are serialized through this lock - see class doc.
+    private val recognizerLock = ReentrantLock()
 
     private val _status = MutableStateFlow<VoskStatus>(VoskStatus.NotInitialized)
     val status: StateFlow<VoskStatus> = _status
@@ -56,13 +78,7 @@ class VoskManager(private val context: Context) {
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening
 
-    // Set synchronously by the native callback (same call stack as feedAudio/
-    // stopListening, since the native engine calls back before returning -
-    // see vosk_wrapper.cpp's feedAudio, which invokes the result callback
-    // inline rather than off a separate thread). Consumed and cleared by
-    // whichever Kotlin call triggered it.
-    @Volatile
-    private var pendingFinalText: String? = null
+    private var chunkCount = 0
 
     sealed class VoskStatus {
         object NotInitialized : VoskStatus()
@@ -72,98 +88,109 @@ class VoskManager(private val context: Context) {
         object LoadingModel : VoskStatus()
     }
 
-    private val nativeCallbacks = object : NativeBridge.Callbacks {
-        override fun onTranscription(text: String, isFinal: Boolean) {
-            DebugLog.log(context, TAG, "onTranscription(isFinal=$isFinal, len=${text.length}): \"$text\"")
-            _transcription.value = text
-            if (isFinal) {
-                pendingFinalText = text
-            }
-        }
-
-        override fun onResponse(response: String) {
-            // Not used for plain STT - Kate's response generation is driven
-            // from Kotlin (KateResponseGenerator) once a final transcript
-            // comes back from here, not from the native engine's own
-            // response pipeline.
-        }
-
-        override fun onError(error: String) {
-            Log.e(TAG, "Native engine error: $error")
-            DebugLog.log(context, TAG, "onError: $error")
-        }
-
-        override fun onStateChange(state: Int) {
-            DebugLog.log(context, TAG, "onStateChange: $state")
-        }
-    }
-
     suspend fun initialize(callback: (Boolean) -> Unit) = withContext(Dispatchers.IO) {
         try {
             _status.value = VoskStatus.Initializing
-            Log.d(TAG, "Initializing native speech engine...")
-            DebugLog.log(context, TAG, "initialize() start")
+            Log.d(TAG, "Initializing org.vosk speech engine...")
+            DebugLog.log(context, TAG, "initialize() start (org.vosk / vosk-android 0.3.47)")
 
             val modelDirPath = ensureModelAvailable()
             if (modelDirPath == null) {
                 _status.value = VoskStatus.Error
-                DebugLog.log(context, TAG, "initialize() FAILED: no model available (assets copy and network download both failed)")
+                DebugLog.log(context, TAG, "initialize() FAILED: no valid model available")
                 callback(false)
                 return@withContext
             }
 
-            // KateEngine::initialize() appends "/vosk-model" to whatever root
-            // path it's given, so we hand it the *parent* of the model
-            // directory ensureModelAvailable() just prepared.
-            val modelRootPath = File(modelDirPath).parentFile?.absolutePath
-                ?: context.filesDir.absolutePath
+            recognizerLock.withLock {
+                model = Model(modelDirPath)
+                recognizer = Recognizer(model, SAMPLE_RATE)
+            }
 
-            val configDir = File(context.filesDir, "config").apply { mkdirs() }
-            DebugLog.log(context, TAG, "modelRootPath=$modelRootPath configDir=${configDir.absolutePath}")
-
-            bridge.setCallbacks(nativeCallbacks)
-            val ok = bridge.initializeEngine(modelRootPath, configDir.absolutePath)
-
-            _status.value = if (ok) VoskStatus.Ready else VoskStatus.Error
-            Log.d(TAG, if (ok) "Native engine initialized successfully" else "Native engine failed to initialize")
-            DebugLog.log(context, TAG, "bridge.initializeEngine() returned $ok")
-            callback(ok)
+            _status.value = VoskStatus.Ready
+            Log.d(TAG, "org.vosk initialized successfully")
+            DebugLog.log(context, TAG, "initialize() succeeded, modelDir=$modelDirPath")
+            callback(true)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Native engine initialization failed", e)
+            Log.e(TAG, "org.vosk initialization failed", e)
             DebugLog.log(context, TAG, "initialize() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}")
             _status.value = VoskStatus.Error
             callback(false)
         }
     }
 
-    private var chunkCount = 0
-
     fun startListening(): Boolean {
+        if (recognizer == null) {
+            Log.e(TAG, "Cannot start listening - recognizer not initialized")
+            DebugLog.log(context, TAG, "startListening() FAILED: recognizer is null")
+            return false
+        }
         pendingFinalText = null
         _transcription.value = ""
         chunkCount = 0
-        val started = bridge.startListening()
-        _isListening.value = started
-        DebugLog.log(context, TAG, "startListening() -> $started")
-        if (!started) {
-            Log.e(TAG, "Native engine refused to start listening (not initialized?)")
+        recognizerLock.withLock {
+            try { recognizer?.reset() } catch (e: Exception) {
+                Log.e(TAG, "reset() before listening failed", e)
+            }
         }
-        return started
+        _isListening.value = true
+        DebugLog.log(context, TAG, "startListening() -> true")
+        return true
     }
+
+    @Volatile
+    private var pendingFinalText: String? = null
 
     /** Feeds a chunk of PCM16 mono audio. Returns the final transcript if this chunk completed one, else null. */
     fun feedAudio(audioData: ByteArray): String? {
-        if (!_isListening.value) return null
+        if (!_isListening.value || recognizer == null) return null
+
+        chunkCount++
+        val logThisCall = (chunkCount == 1 || chunkCount % 25 == 0)
+
         return try {
-            chunkCount++
-            if (chunkCount == 1 || chunkCount % 25 == 0) {
-                DebugLog.log(context, TAG, "feedAudio() chunk #$chunkCount, ${audioData.size} bytes")
+            var isFinal = false
+            var resultJson = "{}"
+            var partialJson = "{}"
+
+            recognizerLock.withLock {
+                isFinal = try {
+                    recognizer?.acceptWaveForm(audioData, audioData.size) ?: false
+                } catch (e: Exception) {
+                    Log.e(TAG, "acceptWaveForm failed", e)
+                    DebugLog.log(context, TAG, "acceptWaveForm() EXCEPTION at chunk #$chunkCount: ${e.javaClass.simpleName}: ${e.message}")
+                    false
+                }
+
+                if (isFinal) {
+                    resultJson = try { recognizer?.result ?: "{}" } catch (e: Exception) { "{}" }
+                } else {
+                    partialJson = try { recognizer?.partialResult ?: "{}" } catch (e: Exception) { "{}" }
+                }
             }
-            bridge.feedAudio(audioData)
-            val final = pendingFinalText
-            if (final != null) pendingFinalText = null
-            final
+
+            if (isFinal) {
+                val text = JSONObject(resultJson).optString("text", "").trim()
+                if (logThisCall || text.isNotEmpty()) {
+                    DebugLog.log(context, TAG, "final at chunk #$chunkCount: \"$text\" raw=$resultJson")
+                }
+                if (text.isNotEmpty()) {
+                    _transcription.value = text
+                    pendingFinalText = text
+                    return text
+                }
+                null
+            } else {
+                val partial = JSONObject(partialJson).optString("partial", "").trim()
+                if (logThisCall) {
+                    DebugLog.log(context, TAG, "partial at chunk #$chunkCount: \"$partial\" raw=$partialJson")
+                }
+                if (partial.isNotEmpty()) {
+                    _transcription.value = partial
+                }
+                null
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to process audio", e)
             DebugLog.log(context, TAG, "feedAudio() EXCEPTION at chunk #$chunkCount: ${e.javaClass.simpleName}: ${e.message}")
@@ -172,16 +199,17 @@ class VoskManager(private val context: Context) {
     }
 
     fun stopListening(): String? {
+        _isListening.value = false
         return try {
-            bridge.stopListening()
-            _isListening.value = false
-            // Prefer a final result the callback already delivered; fall back
-            // to whatever partial transcript is on screen so the user's
-            // words aren't silently dropped if Vosk never finalized in time.
-            val result = pendingFinalText ?: _transcription.value.takeIf { it.isNotBlank() }
+            var resultJson = "{}"
+            recognizerLock.withLock {
+                resultJson = try { recognizer?.finalResult ?: recognizer?.result ?: "{}" } catch (e: Exception) { "{}" }
+            }
+            val text = JSONObject(resultJson).optString("text", "").trim()
+            val result = text.ifEmpty { pendingFinalText } ?: _transcription.value.takeIf { it.isNotBlank() }
             pendingFinalText = null
             Log.d(TAG, "Stopped listening. Final: $result")
-            DebugLog.log(context, TAG, "stopListening() -> chunks fed=$chunkCount, result=${result?.let { "\"$it\"" } ?: "null"}")
+            DebugLog.log(context, TAG, "stopListening() -> chunks fed=$chunkCount, result=${result?.let { "\"$it\"" } ?: "null"}, raw=$resultJson")
             result
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop listening", e)
@@ -194,28 +222,35 @@ class VoskManager(private val context: Context) {
      * Returns a real filesystem path to the model, copying it out of
      * assets on first run if needed. Falls back to a network download
      * only if the model isn't bundled in assets at all.
+     *
+     * Validates both am/ and conf/ subdirectories exist, not just one
+     * file's presence - a lesson from the sibling project's
+     * isValidModelDir(), which is a meaningfully stricter check than what
+     * this class used to do.
      */
     private suspend fun ensureModelAvailable(): String? = withContext(Dispatchers.IO) {
         val internalModelDir = File(context.filesDir, MODEL_DIR)
-        val internalModelFile = File(internalModelDir, "am/final.mdl")
-        if (internalModelFile.exists()) {
+        if (isValidModelDir(internalModelDir)) {
             Log.d(TAG, "Model already present in internal storage")
-            DebugLog.log(context, TAG, "ensureModelAvailable(): cached model found, am/final.mdl=${internalModelFile.length()} bytes")
+            DebugLog.log(context, TAG, "ensureModelAvailable(): cached model found and validated (am/ + conf/ present)")
             return@withContext internalModelDir.absolutePath
         }
 
         val copiedFromAssets = copyAssetModelToInternalStorage(internalModelDir)
-        if (copiedFromAssets) {
+        if (copiedFromAssets && isValidModelDir(internalModelDir)) {
             Log.d(TAG, "Copied bundled model from assets to internal storage")
-            DebugLog.log(context, TAG, "ensureModelAvailable(): copied from assets, am/final.mdl=${internalModelFile.length()} bytes")
+            DebugLog.log(context, TAG, "ensureModelAvailable(): copied from assets and validated")
             return@withContext internalModelDir.absolutePath
         }
 
         Log.w(TAG, "Model not bundled in assets, attempting network download")
-        DebugLog.log(context, TAG, "ensureModelAvailable(): no bundled model in assets, attempting network download")
+        DebugLog.log(context, TAG, "ensureModelAvailable(): no valid bundled model, attempting network download")
         return@withContext try {
             downloadModel(internalModelDir)
-            DebugLog.log(context, TAG, "ensureModelAvailable(): download succeeded, am/final.mdl=${internalModelFile.length()} bytes")
+            if (!isValidModelDir(internalModelDir)) {
+                throw Exception("Downloaded model failed validation (am/ or conf/ missing)")
+            }
+            DebugLog.log(context, TAG, "ensureModelAvailable(): download succeeded and validated")
             internalModelDir.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Network model download failed", e)
@@ -223,6 +258,9 @@ class VoskManager(private val context: Context) {
             null
         }
     }
+
+    private fun isValidModelDir(dir: File): Boolean =
+        dir.exists() && File(dir, "am").isDirectory && File(dir, "conf").isDirectory
 
     /** Recursively copies the assets model directory to the given destination directory. */
     private fun copyAssetModelToInternalStorage(destDir: File): Boolean {
@@ -232,8 +270,7 @@ class VoskManager(private val context: Context) {
 
             destDir.mkdirs()
             copyAssetDirRecursive(MODEL_DIR, destDir)
-
-            File(destDir, "am/final.mdl").exists()
+            true
         } catch (e: Exception) {
             Log.w(TAG, "No bundled model found in assets: ${e.message}")
             false
@@ -289,11 +326,17 @@ class VoskManager(private val context: Context) {
         ZipFile(zipFile).use { zip ->
             zip.entries().asSequence().forEach { entry ->
                 if (!entry.isDirectory) {
-                    val targetFile = File(destDir, entry.name)
-                    targetFile.parentFile?.mkdirs()
-                    zip.getInputStream(entry).use { input ->
-                        FileOutputStream(targetFile).use { output ->
-                            input.copyTo(output)
+                    // Model zips from alphacephei nest everything under a
+                    // top-level "<model-name>/" folder - strip that so
+                    // am/, conf/, graph/ land directly under destDir.
+                    val relativeName = entry.name.substringAfter('/')
+                    if (relativeName.isNotBlank()) {
+                        val targetFile = File(destDir, relativeName)
+                        targetFile.parentFile?.mkdirs()
+                        zip.getInputStream(entry).use { input ->
+                            FileOutputStream(targetFile).use { output ->
+                                input.copyTo(output)
+                            }
                         }
                     }
                 }
@@ -301,12 +344,7 @@ class VoskManager(private val context: Context) {
         }
 
         zipFile.delete()
-
-        val modelFile = File(destDir, "am/final.mdl")
-        if (!modelFile.exists()) {
-            throw Exception("Model file not found after extraction")
-        }
-        Log.d(TAG, "✅ Vosk model downloaded successfully")
+        Log.d(TAG, "Vosk model downloaded and extracted")
         _status.value = VoskStatus.Ready
     }
 }
