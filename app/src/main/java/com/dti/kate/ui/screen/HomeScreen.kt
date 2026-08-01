@@ -1,6 +1,7 @@
 package com.dti.kate.ui.screen
 
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +30,8 @@ import com.dti.kate.utils.DeviceControlManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -46,6 +49,8 @@ fun HomeScreen(
 
     val micPermission = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
     val locationPermission = rememberPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+    val contactsPermission = rememberPermissionState(android.Manifest.permission.READ_CONTACTS)
+    val contactsHelper = remember { ContactsHelper(context) }
 
     val localSettings = remember { LocalSettingsStore(context) }
     val responseGenerator = remember { KateResponseGenerator() }
@@ -65,8 +70,33 @@ fun HomeScreen(
     val liveTranscription by voskManager.transcription.collectAsState()
 
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var speechCompletion by remember { mutableStateOf<CompletableDeferred<Unit>?>(null) }
     DisposableEffect(Unit) {
         val instance = TextToSpeech(context) { }
+        instance.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+
+            override fun onDone(utteranceId: String?) {
+                if (utteranceId == "kate_reply") {
+                    coroutineScope.launch(Dispatchers.Main) {
+                        kateState = KateState.IDLE
+                        speechCompletion?.complete(Unit)
+                        speechCompletion = null
+                    }
+                }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                if (utteranceId == "kate_reply") {
+                    coroutineScope.launch(Dispatchers.Main) {
+                        kateState = KateState.IDLE
+                        speechCompletion?.complete(Unit)
+                        speechCompletion = null
+                    }
+                }
+            }
+        })
         tts = instance
         onDispose {
             instance.stop()
@@ -85,6 +115,71 @@ fun HomeScreen(
         tts?.language = Locale.US
         kateState = KateState.SPEAKING
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "kate_reply")
+    }
+
+    /** Speaks and suspends until TTS actually finishes - needed before re-listening for a name. */
+    suspend fun speakAndWait(text: String) {
+        val deferred = CompletableDeferred<Unit>()
+        speechCompletion = deferred
+        speak(text)
+        deferred.await()
+    }
+
+    /**
+     * Resolves a spoken name to a device contact.
+     *
+     * Two layers, in order:
+     *  1. Fuzzy match against whatever open-vocabulary text Vosk already
+     *     produced. Fast, no extra round-trip, works fine when the name
+     *     came through reasonably intact.
+     *  2. Grammar-constrained re-listen: if that fails, prompt the user
+     *     and listen again with the recognizer restricted to just the
+     *     device's contact names (see VoskManager.startListeningWithGrammar).
+     *     This steers Vosk's own acoustic search toward the closest real
+     *     name using the full model, rather than fuzzy-matching after the
+     *     fact on free-form output - meaningfully better for names outside
+     *     the model's training data (many African names, in particular).
+     */
+    suspend fun resolveContact(spokenName: String): Contact? {
+        if (!contactsPermission.status.isGranted) {
+            contactsPermission.launchPermissionRequest()
+            return null
+        }
+
+        val contacts = contactsHelper.getAllContacts()
+        if (contacts.isEmpty()) return null
+
+        contactsHelper.findBestMatch(spokenName, contacts)?.let { return it }
+
+        val tone = toneFromSlider(localSettings.getToneLevel())
+        speakAndWait(responseGenerator.speechForWhoToCall(tone))
+
+        val contactNames = contacts.map { it.name }
+        if (!voskManager.startListeningWithGrammar(contactNames)) return null
+
+        val reheard = CompletableDeferred<String?>()
+        val timeoutJob = coroutineScope.launch {
+            delay(6000)
+            if (!reheard.isCompleted) reheard.complete(null)
+        }
+
+        audioCapture.start(context, coroutineScope) { chunk ->
+            val finalResult = voskManager.feedAudio(chunk)
+            if (finalResult != null && !reheard.isCompleted) {
+                reheard.complete(finalResult)
+            }
+        }
+
+        val heardDuringCapture = reheard.await()
+        timeoutJob.cancel()
+        audioCapture.stop()
+        val finalText = heardDuringCapture ?: voskManager.stopListening()
+        voskManager.restoreDefaultRecognizer()
+
+        if (finalText.isNullOrBlank()) return null
+
+        return contacts.firstOrNull { it.name.equals(finalText, ignoreCase = true) }
+            ?: contactsHelper.findBestMatch(finalText, contacts, minSimilarity = 0.4)
     }
 
     LaunchedEffect(Unit) {
@@ -154,8 +249,33 @@ fun HomeScreen(
                 responseGenerator.speechForVolume(tone)
             }
             is KateAction.MakeCall -> {
-                deviceControl.makeCall(action.number)
-                responseGenerator.speechForCall(action.number, tone)
+                if (!contactsPermission.status.isGranted) {
+                    contactsPermission.launchPermissionRequest()
+                    responseGenerator.speechForNoContactsPermission(tone)
+                } else {
+                    val contact = resolveContact(action.spokenName)
+                    if (contact != null) {
+                        deviceControl.makeCall(contact.phoneNumber)
+                        responseGenerator.speechForCall(contact.name, tone)
+                    } else {
+                        responseGenerator.speechForContactNotFound(action.spokenName, tone)
+                    }
+                }
+            }
+            is KateAction.SendMessage -> {
+                if (!contactsPermission.status.isGranted) {
+                    contactsPermission.launchPermissionRequest()
+                    responseGenerator.speechForNoContactsPermission(tone)
+                } else {
+                    val contact = resolveContact(action.spokenName)
+                    if (contact != null) {
+                        val body = action.body ?: "Hi"
+                        deviceControl.sendSms(contact.phoneNumber, body)
+                        responseGenerator.speechForMessage(contact.name, tone)
+                    } else {
+                        responseGenerator.speechForContactNotFound(action.spokenName, tone)
+                    }
+                }
             }
             is KateAction.Weather -> {
                 if (!locationPermission.status.isGranted) {
