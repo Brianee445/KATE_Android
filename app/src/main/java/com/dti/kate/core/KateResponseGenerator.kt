@@ -14,7 +14,8 @@ sealed class KateAction {
     data class OpenApp(val appName: String) : KateAction()
     data class TypeText(val text: String) : KateAction()
     data class ToggleTorch(val turnOn: Boolean?) : KateAction()
-    data class MakeCall(val number: String) : KateAction()
+    data class MakeCall(val spokenName: String) : KateAction()
+    data class SendMessage(val spokenName: String, val body: String?) : KateAction()
     data class ToggleBluetooth(val turnOn: Boolean?) : KateAction()
     data class ToggleWifi(val turnOn: Boolean?) : KateAction()
     data class SetVolume(val level: Int?, val increase: Boolean?) : KateAction()
@@ -78,9 +79,25 @@ class KateResponseGenerator {
                 KateAction.SetVolume(level = number, increase = increase)
             }
 
-            lower.contains("call") || lower.contains("dial") -> {
-                val number = Regex("""\d{10,14}""").find(lower)?.value
-                if (number != null) KateAction.MakeCall(number) else KateAction.Unknown
+            lower.startsWith("call ") || lower.startsWith("phone ") || lower.startsWith("dial ") -> {
+                val target = extractAfterTrigger(lower, listOf("call ", "phone ", "dial "))
+                if (target.isNotBlank()) KateAction.MakeCall(target) else KateAction.Unknown
+            }
+
+            lower.startsWith("message ") || lower.startsWith("text ") -> {
+                // "message chidinma" or "message chidinma saying I'm running late"
+                val rest = extractAfterTrigger(lower, listOf("message ", "text "))
+                val sayingIdx = rest.indexOf(" saying ")
+                val name: String
+                val body: String?
+                if (sayingIdx != -1) {
+                    name = rest.substring(0, sayingIdx).trim()
+                    body = rest.substring(sayingIdx + " saying ".length).trim().ifBlank { null }
+                } else {
+                    name = rest.trim()
+                    body = null
+                }
+                if (name.isNotBlank()) KateAction.SendMessage(name, body) else KateAction.Unknown
             }
 
             lower.startsWith("open ") || lower.contains(" open ") ||
@@ -173,10 +190,43 @@ class KateResponseGenerator {
         KateTone.SASSY -> listOf("Volume adjusted. Your neighbors are welcome.", "Done. Try not to blow your speakers.")
     })
 
-    fun speechForCall(number: String, tone: KateTone): String = pick("call.$tone", when (tone) {
-        KateTone.PROFESSIONAL -> listOf("Calling $number.", "Dialing $number now.")
-        KateTone.BALANCED -> listOf("Calling $number now.", "Dialing $number.")
-        KateTone.SASSY -> listOf("Calling $number. Try to be nice.", "Dialing $number - don't overthink it.")
+    fun speechForCall(contactName: String, tone: KateTone): String = pick("call.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("Calling $contactName.", "Dialing $contactName now.")
+        KateTone.BALANCED -> listOf("Calling $contactName now.", "Dialing $contactName.")
+        KateTone.SASSY -> listOf("Calling $contactName. Try to be nice.", "Dialing $contactName - don't overthink it.")
+    })
+
+    fun speechForMessage(contactName: String, tone: KateTone): String = pick("message.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("Sending your message to $contactName.", "Message sent to $contactName.")
+        KateTone.BALANCED -> listOf("Sending that to $contactName.", "Message sent to $contactName.")
+        KateTone.SASSY -> listOf("Firing that off to $contactName.", "Sent to $contactName, hope it's not a mistake.")
+    })
+
+    fun speechForContactNotFound(spokenName: String, tone: KateTone): String = pick("contact_not_found.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf(
+            "I couldn't find $spokenName in your contacts.",
+            "No contact matching $spokenName was found.",
+        )
+        KateTone.BALANCED -> listOf(
+            "I couldn't find $spokenName in your contacts.",
+            "Hmm, no one named $spokenName in your contacts.",
+        )
+        KateTone.SASSY -> listOf(
+            "$spokenName isn't in your contacts, unless you're speaking a secret language.",
+            "No $spokenName here - are you sure that's a real contact?",
+        )
+    })
+
+    fun speechForNoContactsPermission(tone: KateTone): String = pick("no_contacts_permission.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I need contacts access to do that. Please grant the permission and try again.")
+        KateTone.BALANCED -> listOf("I need permission to see your contacts for that one.")
+        KateTone.SASSY -> listOf("Can't do that without contacts access - not a mind reader.")
+    })
+
+    fun speechForWhoToCall(tone: KateTone): String = pick("who_to_call.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I didn't catch that clearly - who would you like to call?")
+        KateTone.BALANCED -> listOf("Sorry, who was that again?")
+        KateTone.SASSY -> listOf("Didn't quite catch that name - say it again?")
     })
 
     fun speechForHelp(tone: KateTone): String = pick("help.$tone", when (tone) {
