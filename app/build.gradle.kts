@@ -257,7 +257,14 @@ ksp {
 }
 
 tasks.register<DownloadVoskModelTask>("downloadVoskModel") {
-    modelUrl = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+    // en-us-0.22-lgraph (128M): supports dynamic vocabulary reconfiguration
+    // at runtime (needed for reliably recognizing contact names when
+    // calling/messaging - no static vocabulary, however large, covers
+    // arbitrary proper names) and meaningfully better baseline accuracy
+    // (WER 7.82 vs 9.85) than the small model, while staying well clear of
+    // the 1.8G+ "full" models that aren't practical to bundle/download on
+    // budget devices.
+    modelUrl = "https://alphacephei.com/vosk/models/vosk-model-en-us-0.22-lgraph.zip"
     modelDir = file("src/main/assets/vosk-model")
 }
 
