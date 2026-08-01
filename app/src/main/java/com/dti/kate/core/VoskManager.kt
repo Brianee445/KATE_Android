@@ -57,7 +57,7 @@ class VoskManager(private val context: Context) {
     companion object {
         private const val TAG = "VoskManager"
         private const val MODEL_DIR = "vosk-model"
-        private const val MODEL_NAME = "vosk-model-small-en-us-0.15"
+        private const val MODEL_NAME = "vosk-model-en-us-0.22-lgraph"
         private const val ZIP_NAME = "$MODEL_NAME.zip"
         private const val SAMPLE_RATE = 16000f
     }
@@ -137,6 +137,62 @@ class VoskManager(private val context: Context) {
         _isListening.value = true
         DebugLog.log(context, TAG, "startListening() -> true")
         return true
+    }
+
+    /**
+     * Starts a listening session constrained to only recognize [words] (plus
+     * an implicit "[unk]" catch-all for anything outside that list, so
+     * unrelated speech doesn't get force-matched to the wrong word). Used
+     * for resolving contact names, where the acoustic model's full search
+     * space would otherwise favor common English words over a name it
+     * barely knows.
+     *
+     * Swaps in a temporary Recognizer built from the same already-loaded
+     * Model - cheap, no disk I/O - and leaves the default recognizer
+     * closed until [restoreDefaultRecognizer] is called.
+     */
+    fun startListeningWithGrammar(words: List<String>): Boolean {
+        val currentModel = model
+        if (currentModel == null) {
+            Log.e(TAG, "Cannot start grammar listening - model not initialized")
+            DebugLog.log(context, TAG, "startListeningWithGrammar() FAILED: model is null")
+            return false
+        }
+        return try {
+            val grammarJson = org.json.JSONArray().apply {
+                words.forEach { put(it) }
+                put("[unk]")
+            }.toString()
+
+            recognizerLock.withLock {
+                recognizer?.close()
+                recognizer = Recognizer(currentModel, SAMPLE_RATE, grammarJson)
+            }
+            pendingFinalText = null
+            _transcription.value = ""
+            chunkCount = 0
+            _isListening.value = true
+            DebugLog.log(context, TAG, "startListeningWithGrammar() -> true, words=${words.size}")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start grammar-constrained listening", e)
+            DebugLog.log(context, TAG, "startListeningWithGrammar() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}")
+            false
+        }
+    }
+
+    /** Reverts to the normal open-vocabulary recognizer after a grammar-constrained session. */
+    fun restoreDefaultRecognizer() {
+        val currentModel = model ?: return
+        recognizerLock.withLock {
+            try {
+                recognizer?.close()
+                recognizer = Recognizer(currentModel, SAMPLE_RATE)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restore default recognizer", e)
+                DebugLog.log(context, TAG, "restoreDefaultRecognizer() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
     }
 
     @Volatile
