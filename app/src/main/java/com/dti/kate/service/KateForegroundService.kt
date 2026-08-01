@@ -42,6 +42,8 @@ class KateForegroundService : Service() {
     }
 
     private var tts: TextToSpeech? = null
+    private var isTtsReady = false
+    private var pendingSpeech: String? = null
     private lateinit var localSettings: LocalSettingsStore
     private val responseGenerator = KateResponseGenerator()
 
@@ -120,7 +122,9 @@ class KateForegroundService : Service() {
                 Intent.ACTION_POWER_DISCONNECTED -> responseGenerator.speechForChargerDisconnected(tone)
                 else -> null
             }
-            message?.let { speak(it) }
+            message?.let {
+                if (isTtsReady) speak(it) else pendingSpeech = it
+            }
         }
     }
 
@@ -129,7 +133,15 @@ class KateForegroundService : Service() {
         localSettings = LocalSettingsStore(this)
         createNotificationChannel()
 
-        tts = TextToSpeech(this) { }
+        tts = TextToSpeech(this) { status ->
+            isTtsReady = (status == TextToSpeech.SUCCESS)
+            if (isTtsReady) {
+                pendingSpeech?.let { queued ->
+                    pendingSpeech = null
+                    speak(queued)
+                }
+            }
+        }
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_POWER_CONNECTED)
