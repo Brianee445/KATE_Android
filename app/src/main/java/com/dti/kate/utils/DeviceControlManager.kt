@@ -116,7 +116,42 @@ class DeviceControlManager(private val context: Context) {
             false
         }
     }
-    
+
+    /** Sends an SMS directly if SEND_SMS is granted, else opens the messaging app pre-filled. */
+    fun sendSms(phoneNumber: String, body: String): Boolean {
+        return try {
+            val cleanNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
+            if (cleanNumber.isEmpty()) {
+                Log.w(TAG, "Invalid phone number for SMS")
+                return false
+            }
+
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.SEND_SMS
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                val smsManager = context.getSystemService(android.telephony.SmsManager::class.java)
+                    ?: android.telephony.SmsManager.getDefault()
+                smsManager.sendTextMessage(cleanNumber, null, body, null, null)
+                Log.i(TAG, "SMS sent to $cleanNumber")
+                true
+            } else {
+                Log.w(TAG, "SEND_SMS permission not granted, opening messaging app")
+                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                    data = Uri.parse("smsto:$cleanNumber")
+                    putExtra("sms_body", body)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send SMS: ${e.message}")
+            false
+        }
+    }
+
     // ========================================================================
     // 3. BLUETOOTH CONTROL
     // ========================================================================
