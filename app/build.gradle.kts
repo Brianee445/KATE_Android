@@ -43,16 +43,15 @@ android {
         }
     }
 
-    // Produces one installable APK per ABI (plus a universal fallback)
-    // from a single `./gradlew assembleRelease` run - so both 32-bit and
-    // 64-bit devices can be tested directly without relying on Play
-    // Store's dynamic delivery.
+    // Single universal APK containing both ABIs, rather than splitting into
+    // three artifacts (arm64-v8a-only, armeabi-v7a-only, universal) per
+    // build. This app is side-loaded directly, not distributed through
+    // Play Store's dynamic delivery, so per-ABI splits only add build time
+    // and confusion about which file to download - the universal APK is
+    // the only one actually used.
     splits {
         abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = true
+            isEnable = false
         }
     }
 
