@@ -152,6 +152,26 @@ class DeviceControlManager(private val context: Context) {
         }
     }
 
+    /** Checks if the app is exempt from battery optimization (needed for reliable background wake-gesture detection). */
+    fun isIgnoringBatteryOptimizations(): Boolean {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        return pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    /** Launches the system dialog to request battery optimization exemption. No-op if already exempt. */
+    fun requestIgnoreBatteryOptimizations() {
+        if (isIgnoringBatteryOptimizations()) return
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to request battery optimization exemption: ${e.message}")
+        }
+    }
+
     // ========================================================================
     // 3. BLUETOOTH CONTROL
     // ========================================================================
