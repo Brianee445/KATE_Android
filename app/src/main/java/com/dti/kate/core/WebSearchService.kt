@@ -40,6 +40,7 @@ class WebSearchService {
 
                 null
             } catch (e: Exception) {
+                android.util.Log.e("WebSearchService", "getInstantAnswer failed for query: $query", e)
                 null
             }
         }
