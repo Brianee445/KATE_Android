@@ -106,12 +106,16 @@ fun HomeScreen(
 
     fun speak(text: String) {
         val tone = toneFromSlider(localSettings.getToneLevel())
+        // Slightly slower + slightly lower pitch than TTS defaults, layered
+        // under the existing tone slider, for a calmer overall delivery -
+        // easier to follow for elderly listeners in particular.
         val rate = when (tone) {
-            KateTone.PROFESSIONAL -> 0.95f
-            KateTone.BALANCED -> 1.0f
-            KateTone.SASSY -> 1.05f
+            KateTone.PROFESSIONAL -> 0.88f
+            KateTone.BALANCED -> 0.92f
+            KateTone.SASSY -> 0.97f
         }
         tts?.setSpeechRate(rate)
+        tts?.setPitch(0.95f)
         tts?.language = Locale.US
         kateState = KateState.SPEAKING
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "kate_reply")
