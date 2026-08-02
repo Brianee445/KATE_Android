@@ -54,6 +54,7 @@ fun KateNavHost(navController: NavHostController = rememberNavController()) {
             } else {
                 context.startService(serviceIntent)
             }
+            com.dti.kate.utils.DeviceControlManager(context).requestIgnoreBatteryOptimizations()
         }
     }
 
