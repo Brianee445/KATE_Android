@@ -94,6 +94,7 @@ class SettingsViewModel(private val context: Context) {
                     tier = profile.tier,
                 )
                 _settings.value = _settings.value.copy(syncTraining = profile.syncTrainingEnabled)
+                LocalSettingsStore(context).setSyncTrainingEnabled(profile.syncTrainingEnabled)
                 _errorMessage.value = null
             },
             onFailure = { error ->
@@ -106,9 +107,13 @@ class SettingsViewModel(private val context: Context) {
     suspend fun toggleSyncTraining() {
         val newValue = !_settings.value.syncTraining
         _settings.value = _settings.value.copy(syncTraining = newValue)
+        LocalSettingsStore(context).setSyncTrainingEnabled(newValue)
         repository.updateProfile(syncTraining = newValue).fold(
             onSuccess = { },
-            onFailure = { _settings.value = _settings.value.copy(syncTraining = !newValue) },
+            onFailure = {
+                _settings.value = _settings.value.copy(syncTraining = !newValue)
+                LocalSettingsStore(context).setSyncTrainingEnabled(!newValue)
+            },
         )
     }
 
