@@ -65,6 +65,7 @@ fun KateNavHost(navController: NavHostController = rememberNavController()) {
         composable("register") { RegisterScreen(navController) }
         composable("forgot_password") { ForgotPasswordScreen(navController) }
         composable("home") { HomeScreen(navController, voskManager = voskManager) }
+        composable("chat") { ChatScreen(navController) }
         composable("history") { HistoryScreen(navController) }
         composable("settings") { SettingsScreen(navController) }
         composable("premium") { PremiumScreen(navController) }
