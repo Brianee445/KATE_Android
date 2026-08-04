@@ -13,6 +13,7 @@ class LocalSettingsStore(context: Context) {
         private const val KEY_OFFLINE_MODE = "offline_mode"
         private const val KEY_RAISE_ENABLED = "wake_raise_enabled"
         private const val KEY_SHAKE_ENABLED = "wake_shake_enabled"
+        private const val KEY_SYNC_TRAINING = "sync_training_enabled"
     }
 
     fun getToneLevel(): Float = prefs.getFloat(KEY_TONE, 0.5f)
@@ -29,6 +30,13 @@ class LocalSettingsStore(context: Context) {
 
     fun getShakeEnabled(): Boolean = prefs.getBoolean(KEY_SHAKE_ENABLED, false)
     fun setShakeEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_SHAKE_ENABLED, value).apply()
+
+    // Local cache of the server-side User.sync_training_enabled flag, kept
+    // in sync by SettingsScreen's ViewModel whenever it loads or toggles
+    // the setting - lets VoiceInteractionLogger check this synchronously
+    // on every voice interaction without a network call.
+    fun getSyncTrainingEnabled(): Boolean = prefs.getBoolean(KEY_SYNC_TRAINING, true)
+    fun setSyncTrainingEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_SYNC_TRAINING, value).apply()
 
     fun resetToDefaults() {
         prefs.edit().clear().apply()
