@@ -81,6 +81,12 @@ data class ChatResponse(
     val requiresPayment: Boolean,
 )
 
+data class TranscribeResponse(
+    val text: String,
+    val confidence: Float,
+    val latencyMs: Int,
+)
+
 data class HistoryResponse(
     val conversations: List<ConversationHistoryItem>,
     val limit: Int,
