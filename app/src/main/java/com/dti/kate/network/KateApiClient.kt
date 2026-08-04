@@ -80,12 +80,6 @@ interface KateApiService {
         @Query("current_version") currentVersion: String
     ): ModelUpdateResponse
     
-    @POST("api/v1/sync/logs")
-    suspend fun uploadLogs(
-        @Header("Authorization") token: String,
-        @Body logs: List<SyncLogEntry>
-    ): BaseResponse
-    
     // ==================== PAYMENTS ====================
     @POST("api/v1/payments/create-checkout")
     suspend fun createCheckout(
@@ -105,9 +99,20 @@ interface KateApiService {
         @Header("Authorization") token: String,
         @Body request: UpdateProfileRequest
     ): UserResponse
-    
+
     @GET("api/v1/user/usage")
     suspend fun getUsage(@Header("Authorization") token: String): UsageResponse
+
+    // Gzipped JSONL file upload - matches the backend's actual UploadFile
+    // contract in sync.py (NOT a JSON body; a prior version of this
+    // declaration sent @Body List<SyncLogEntry>, which the server would
+    // have rejected outright since it expects multipart/form-data).
+    @Multipart
+    @POST("api/v1/sync/logs")
+    suspend fun uploadLogs(
+        @Header("Authorization") token: String,
+        @Part file: MultipartBody.Part,
+    ): Map<String, @JvmSuppressWildcards Any>
     
     @DELETE("api/v1/user/account")
     suspend fun deleteAccount(@Header("Authorization") token: String): BaseResponse
