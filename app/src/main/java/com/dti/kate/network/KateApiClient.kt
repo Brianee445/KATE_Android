@@ -8,6 +8,8 @@ import com.google.gson.GsonBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -43,6 +45,19 @@ interface KateApiService {
         @Header("Authorization") token: String,
         @Body request: ChatRequest
     ): ChatResponse
+
+    // ==================== TRANSCRIBE ====================
+    // Raw PCM16 mono audio, proxied server-side to Deepgram - see
+    // VoskManager's transcribeCloud() for the client-side race-against-local
+    // logic this feeds into.
+    @Multipart
+    @POST("api/v1/transcribe")
+    suspend fun transcribe(
+        @Header("Authorization") token: String,
+        @Part audio: MultipartBody.Part,
+        @Query("sample_rate") sampleRate: Int = 16000,
+        @Query("channels") channels: Int = 1,
+    ): TranscribeResponse
     
     @GET("api/v1/chat/history")
     suspend fun getChatHistory(
@@ -226,6 +241,33 @@ class KateApiClient(private val context: Context) {
     
     fun isAuthenticated(): Boolean {
         return !securePrefs.getAccessToken().isNullOrEmpty()
+    }
+
+    /**
+     * Uploads raw PCM16 mono audio for cloud transcription. Returns null on
+     * any failure (network, timeout, no auth, server error) rather than
+     * throwing - this is a best-effort accuracy enhancement over on-device
+     * Vosk, never a required path, so callers should treat null exactly
+     * like "cloud wasn't available right now" and fall back locally.
+     */
+    suspend fun transcribeAudio(
+        audioBytes: ByteArray,
+        sampleRate: Int = 16000,
+        channels: Int = 1,
+    ): TranscribeResponse? {
+        val token = securePrefs.getAccessToken() ?: return null
+        return try {
+            val requestBody = audioBytes.toRequestBody("audio/raw".toMediaTypeOrNull())
+            val part = MultipartBody.Part.createFormData("audio", "audio.raw", requestBody)
+            api.transcribe(
+                token = "Bearer $token",
+                audio = part,
+                sampleRate = sampleRate,
+                channels = channels,
+            )
+        } catch (e: Exception) {
+            null
+        }
     }
     
     fun clearAuth() {
