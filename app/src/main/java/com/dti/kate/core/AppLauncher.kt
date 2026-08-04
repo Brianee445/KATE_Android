@@ -6,6 +6,16 @@ import android.content.pm.PackageManager
 
 class AppLauncher(private val context: Context) {
 
+    /** Returns the display names of all launchable apps on the device, for use as grammar vocabulary. */
+    fun getInstalledAppNames(): List<String> {
+        val pm = context.packageManager
+        val launchableApps = pm.queryIntentActivities(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+            0,
+        )
+        return launchableApps.map { it.loadLabel(pm).toString() }.distinct()
+    }
+
     /** Returns true if a matching installed app was found and launched. */
     fun openAppByName(spokenName: String): Boolean {
         val pm = context.packageManager
