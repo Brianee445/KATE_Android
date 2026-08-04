@@ -5,9 +5,12 @@ import android.speech.tts.UtteranceProgressListener
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
@@ -34,11 +37,18 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 private enum class KateState { IDLE, LISTENING, PROCESSING, SPEAKING }
 
 @OptIn(ExperimentalPermissionsApi::class)
+// Mirrors the backend's MIN_AUDIO_BYTES floor (transcribe.py) - skips the
+// upload entirely for near-silent/too-short buffers rather than wasting a
+// round-trip on something the server would reject anyway. 16kHz mono
+// 16-bit = 32000 bytes/sec, so this is a ~0.3s floor.
+private const val MIN_CLOUD_AUDIO_BYTES = 9600
+
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -60,6 +70,8 @@ fun HomeScreen(
     val locationHelper = remember { LocationHelper(context) }
     val audioCapture = remember { AudioCapture() }
     val appLauncher = remember { AppLauncher(context) }
+    val kateApiClient = remember { com.dti.kate.network.KateApiClient(context) }
+    val recordedAudioBuffer = remember { java.io.ByteArrayOutputStream() }
 
     var kateState by remember { mutableStateOf(KateState.IDLE) }
     var lastReply by remember { mutableStateOf("") }
@@ -189,7 +201,7 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         voskManager.initialize { success ->
             voskReady = success
-            statusMessage = if (success) "Tap mic to start" else "Speech engine failed to load"
+            statusMessage = if (success) "Tap for a command, hold to search" else "Speech engine failed to load"
         }
     }
 
@@ -315,27 +327,91 @@ fun HomeScreen(
         if (!listenJobActive) return
         listenJobActive = false
         audioCapture.stop()
-        val finalText = voskManager.stopListening()
+        val localText = voskManager.stopListening()
+        voskManager.restoreDefaultRecognizer()
+        val bufferedAudio = recordedAudioBuffer.toByteArray()
+
         coroutineScope.launch {
+            val finalText = if (NetworkMonitor.isOnline(context) && kateApiClient.isAuthenticated() && bufferedAudio.size >= MIN_CLOUD_AUDIO_BYTES) {
+                statusMessage = "Refining transcription..."
+                // 6s cap: cloud STT should be well under this for a short
+                // command/query, and we always have the local result ready
+                // as a fallback if it isn't.
+                val cloudResult = withTimeoutOrNull(6000) {
+                    kateApiClient.transcribeAudio(bufferedAudio)
+                }
+                DebugLog.log(
+                    context, "CloudSTT",
+                    "local=\"${localText ?: ""}\" cloud=${cloudResult?.let { "\"${it.text}\" (conf=${it.confidence})" } ?: "unavailable"}"
+                )
+                cloudResult?.text?.takeIf { it.isNotBlank() } ?: localText
+            } else {
+                localText
+            }
             handleQuery(finalText ?: "")
         }
     }
 
-    fun startListening() {
+    /**
+     * Builds the vocabulary for grammar-constrained command listening:
+     * fixed command/control words plus the device's actual installed app
+     * names and contacts, so "call chidinma" or "open <whatever's really
+     * installed>" can resolve correctly in a single pass, not just the
+     * fixed English trigger words.
+     *
+     * Deliberately excludes open-ended search/question triggers ("search",
+     * "what", "who", "how"...) - those need free-vocabulary dictation
+     * (long-press), since there's no fixed vocabulary to constrain a
+     * search query or typed text to.
+     */
+    fun buildCommandGrammar(): List<String> {
+        val staticWords = listOf(
+            "weather", "temperature", "forecast",
+            "torch", "flashlight", "flash", "on", "off", "turn",
+            "bluetooth", "wifi", "wi-fi",
+            "volume", "up", "down", "increase", "decrease", "mute", "set",
+            "call", "phone", "dial",
+            "message", "text", "saying",
+            "open", "launch", "start", "run",
+            "help",
+            "zero", "one", "two", "three", "four", "five", "six", "seven",
+            "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+            "fourteen", "fifteen", "twenty", "thirty", "forty", "fifty", "hundred",
+        )
+        val appNames = appLauncher.getInstalledAppNames()
+        val contactNames = if (contactsPermission.status.isGranted) {
+            contactsHelper.getAllContacts().map { it.name }
+        } else {
+            emptyList()
+        }
+        return (staticWords + appNames + contactNames).distinct()
+    }
+
+    /** useCommandGrammar=true (default, tap) constrains recognition to known command vocabulary for accuracy. false (long-press) uses open dictation for search/free text. */
+    fun startListening(useCommandGrammar: Boolean = true) {
         if (!micPermission.status.isGranted) {
             micPermission.launchPermissionRequest()
             return
         }
         if (!voskReady || listenJobActive) return
 
-        voskManager.startListening()
+        val started = if (useCommandGrammar) {
+            voskManager.startListeningWithGrammar(buildCommandGrammar())
+        } else {
+            voskManager.startListening()
+        }
+        if (!started) return
+
         kateState = KateState.LISTENING
         listenJobActive = true
+        recordedAudioBuffer.reset()
+        statusMessage = if (useCommandGrammar) "Listening for a command..." else "Listening..."
 
         val maxDurationSeconds = localSettings.getTimeoutSeconds().coerceAtLeast(5)
         var elapsedSeconds = 0
 
         audioCapture.start(context, coroutineScope) { chunk ->
+            recordedAudioBuffer.write(chunk)
             val finalResult = voskManager.feedAudio(chunk)
             if (finalResult != null && listenJobActive) {
                 stopListeningAndProcess()
@@ -410,6 +486,9 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { navController.navigate("chat") }) {
+                        Icon(Icons.Outlined.Chat, contentDescription = "Chat with Kate", tint = TextSecondary)
+                    }
                     IconButton(onClick = { navController.navigate("settings") }) {
                         Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = TextSecondary)
                     }
@@ -467,12 +546,21 @@ fun HomeScreen(
                     .size(96.dp)
                     .clip(CircleShape)
                     .background(if (kateState == KateState.LISTENING) LimeAccent else Purple70)
-                    .clickable {
-                        when (kateState) {
-                            KateState.IDLE -> startListening()
-                            KateState.LISTENING -> stopListeningAndProcess()
-                            else -> { /* busy */ }
-                        }
+                    .pointerInput(kateState) {
+                        detectTapGestures(
+                            onTap = {
+                                when (kateState) {
+                                    KateState.IDLE -> startListening(useCommandGrammar = true)
+                                    KateState.LISTENING -> stopListeningAndProcess()
+                                    else -> { /* busy */ }
+                                }
+                            },
+                            onLongPress = {
+                                if (kateState == KateState.IDLE) {
+                                    startListening(useCommandGrammar = false)
+                                }
+                            },
+                        )
                     },
                 contentAlignment = Alignment.Center,
             ) {
@@ -487,7 +575,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Tap mic to start",
+                text = "Tap for a command, hold to search",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
             )
