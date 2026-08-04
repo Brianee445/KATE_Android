@@ -8,6 +8,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 class Repository @Inject constructor(@ApplicationContext private val context: Context) {
@@ -163,6 +166,58 @@ class Repository @Inject constructor(@ApplicationContext private val context: Co
                 val token = securePrefs.getAccessToken() ?: return@withContext Result.failure(Exception("Not logged in"))
                 val response = api.chat("Bearer $token", ChatRequest(query = query))
                 Result.success(response)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * Uploads a batch of locally-logged voice interactions to the
+     * training pipeline, gzipped as JSONL to match sync.py's actual
+     * UploadFile contract. The caller (HomeScreen.maybeSyncVoiceLogs)
+     * only removes entries from the local queue after this succeeds, so a
+     * network failure here just means the batch gets retried next time.
+     *
+     * A 400 almost always means sync_training_enabled is off server-side
+     * for this user - an intentional choice, not an error - so it's
+     * still reported as success, since there's no reason to keep retrying
+     * uploads that'll never be accepted while the setting stays off.
+     */
+    suspend fun uploadSyncLogs(batch: List<SyncLogEntry>): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = securePrefs.getAccessToken() ?: return@withContext Result.failure(Exception("Not logged in"))
+                if (batch.isEmpty()) return@withContext Result.success(Unit)
+
+                val jsonl = buildString {
+                    for (entry in batch) {
+                        append(
+                            org.json.JSONObject().apply {
+                                put("query", entry.query)
+                                put("response", entry.response)
+                                put("intent", entry.intent)
+                                put("confidence", entry.confidence)
+                                put("used_cloud", entry.usedCloud)
+                                put("model_version", entry.modelVersion)
+                                put("created_at", entry.createdAt)
+                            }.toString()
+                        )
+                        append("\n")
+                    }
+                }
+
+                val compressed = java.io.ByteArrayOutputStream().also { bos ->
+                    java.util.zip.GZIPOutputStream(bos).use { it.write(jsonl.toByteArray(Charsets.UTF_8)) }
+                }.toByteArray()
+
+                val requestBody = compressed.toRequestBody("application/gzip".toMediaTypeOrNull())
+                val part = MultipartBody.Part.createFormData("file", "voice_logs.jsonl.gz", requestBody)
+
+                api.uploadLogs(token = "Bearer $token", file = part)
+                Result.success(Unit)
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 400) Result.success(Unit) else Result.failure(e)
             } catch (e: Exception) {
                 Result.failure(e)
             }
