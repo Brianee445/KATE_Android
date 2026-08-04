@@ -71,6 +71,7 @@ fun HomeScreen(
     val audioCapture = remember { AudioCapture() }
     val appLauncher = remember { AppLauncher(context) }
     val kateApiClient = remember { com.dti.kate.network.KateApiClient(context) }
+    val repository = remember { com.dti.kate.repository.Repository(context.applicationContext) }
     val recordedAudioBuffer = remember { java.io.ByteArrayOutputStream() }
 
     var kateState by remember { mutableStateOf(KateState.IDLE) }
@@ -205,7 +206,7 @@ fun HomeScreen(
         }
     }
 
-    suspend fun handleQuery(query: String) {
+    suspend fun handleQuery(query: String, usedCloud: Boolean = false, confidence: Float = 0f) {
         val tone = toneFromSlider(localSettings.getToneLevel())
 
         if (query.isBlank()) {
@@ -320,7 +321,38 @@ fun HomeScreen(
         }
 
         lastReply = reply
+        VoiceInteractionLogger.logInteraction(
+            context = context,
+            query = query,
+            response = reply,
+            intent = action::class.simpleName ?: "Unknown",
+            confidence = confidence,
+            usedCloud = usedCloud,
+            modelVersion = "vosk-0.3.47+deepgram",
+        )
+        maybeSyncVoiceLogs()
         speak(reply)
+    }
+
+    /**
+     * Checks whether enough voice interactions have accumulated locally to
+     * be worth a sync round-trip, and if so uploads a batch in the
+     * background. Fire-and-forget by design - a failed sync just leaves
+     * the entries in place to retry next time, never blocks or affects
+     * the current interaction.
+     */
+    fun maybeSyncVoiceLogs() {
+        val syncBatchThreshold = 10
+        if (VoiceInteractionLogger.unsyncedCount(context) < syncBatchThreshold) return
+        if (!NetworkMonitor.isOnline(context) || !kateApiClient.isAuthenticated()) return
+
+        coroutineScope.launch {
+            val batch = VoiceInteractionLogger.peekBatch(context, limit = 100)
+            if (batch.isEmpty()) return@launch
+            repository.uploadSyncLogs(batch).onSuccess {
+                VoiceInteractionLogger.removeOldest(context, batch.size)
+            }
+        }
     }
 
     fun stopListeningAndProcess() {
@@ -332,6 +364,9 @@ fun HomeScreen(
         val bufferedAudio = recordedAudioBuffer.toByteArray()
 
         coroutineScope.launch {
+            var usedCloud = false
+            var confidence = 0f
+
             val finalText = if (NetworkMonitor.isOnline(context) && kateApiClient.isAuthenticated() && bufferedAudio.size >= MIN_CLOUD_AUDIO_BYTES) {
                 statusMessage = "Refining transcription..."
                 // 6s cap: cloud STT should be well under this for a short
@@ -344,11 +379,16 @@ fun HomeScreen(
                     context, "CloudSTT",
                     "local=\"${localText ?: ""}\" cloud=${cloudResult?.let { "\"${it.text}\" (conf=${it.confidence})" } ?: "unavailable"}"
                 )
-                cloudResult?.text?.takeIf { it.isNotBlank() } ?: localText
+                val cloudText = cloudResult?.text?.takeIf { it.isNotBlank() }
+                if (cloudText != null) {
+                    usedCloud = true
+                    confidence = cloudResult.confidence
+                }
+                cloudText ?: localText
             } else {
                 localText
             }
-            handleQuery(finalText ?: "")
+            handleQuery(finalText ?: "", usedCloud, confidence)
         }
     }
 
