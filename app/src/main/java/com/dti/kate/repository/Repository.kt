@@ -157,6 +157,18 @@ class Repository @Inject constructor(@ApplicationContext private val context: Co
         }
     }
 
+    suspend fun chat(query: String): Result<ChatResponse> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = securePrefs.getAccessToken() ?: return@withContext Result.failure(Exception("Not logged in"))
+                val response = api.chat("Bearer $token", ChatRequest(query = query))
+                Result.success(response)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
     suspend fun getSubscriptionStatus(): Result<SubscriptionStatusResponse> {
         return withContext(Dispatchers.IO) {
             try {
