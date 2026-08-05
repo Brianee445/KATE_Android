@@ -206,6 +206,27 @@ fun HomeScreen(
         }
     }
 
+    /**
+     * Checks whether enough voice interactions have accumulated locally to
+     * be worth a sync round-trip, and if so uploads a batch in the
+     * background. Fire-and-forget by design - a failed sync just leaves
+     * the entries in place to retry next time, never blocks or affects
+     * the current interaction.
+     */
+    fun maybeSyncVoiceLogs() {
+        val syncBatchThreshold = 10
+        if (VoiceInteractionLogger.unsyncedCount(context) < syncBatchThreshold) return
+        if (!NetworkMonitor.isOnline(context) || !kateApiClient.isAuthenticated()) return
+
+        coroutineScope.launch {
+            val batch = VoiceInteractionLogger.peekBatch(context, limit = 100)
+            if (batch.isEmpty()) return@launch
+            repository.uploadSyncLogs(batch).onSuccess {
+                VoiceInteractionLogger.removeOldest(context, batch.size)
+            }
+        }
+    }
+
     suspend fun handleQuery(query: String, usedCloud: Boolean = false, confidence: Float = 0f) {
         val tone = toneFromSlider(localSettings.getToneLevel())
 
@@ -332,27 +353,6 @@ fun HomeScreen(
         )
         maybeSyncVoiceLogs()
         speak(reply)
-    }
-
-    /**
-     * Checks whether enough voice interactions have accumulated locally to
-     * be worth a sync round-trip, and if so uploads a batch in the
-     * background. Fire-and-forget by design - a failed sync just leaves
-     * the entries in place to retry next time, never blocks or affects
-     * the current interaction.
-     */
-    fun maybeSyncVoiceLogs() {
-        val syncBatchThreshold = 10
-        if (VoiceInteractionLogger.unsyncedCount(context) < syncBatchThreshold) return
-        if (!NetworkMonitor.isOnline(context) || !kateApiClient.isAuthenticated()) return
-
-        coroutineScope.launch {
-            val batch = VoiceInteractionLogger.peekBatch(context, limit = 100)
-            if (batch.isEmpty()) return@launch
-            repository.uploadSyncLogs(batch).onSuccess {
-                VoiceInteractionLogger.removeOldest(context, batch.size)
-            }
-        }
     }
 
     fun stopListeningAndProcess() {
