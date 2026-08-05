@@ -42,13 +42,13 @@ import java.util.Locale
 
 private enum class KateState { IDLE, LISTENING, PROCESSING, SPEAKING }
 
-@OptIn(ExperimentalPermissionsApi::class)
 // Mirrors the backend's MIN_AUDIO_BYTES floor (transcribe.py) - skips the
 // upload entirely for near-silent/too-short buffers rather than wasting a
 // round-trip on something the server would reject anyway. 16kHz mono
 // 16-bit = 32000 bytes/sec, so this is a ~0.3s floor.
 private const val MIN_CLOUD_AUDIO_BYTES = 9600
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
