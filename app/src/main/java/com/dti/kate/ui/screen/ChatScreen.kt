@@ -138,7 +138,7 @@ fun ChatScreen(navController: NavController) {
                     value = inputText,
                     onValueChange = { inputText = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Type a message...") },
+                    placeholder = { Text("Ask Kate anything...") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     colors = OutlinedTextFieldDefaults.colors(
