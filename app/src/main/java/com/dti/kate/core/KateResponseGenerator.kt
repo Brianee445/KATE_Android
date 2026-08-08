@@ -22,6 +22,7 @@ sealed class KateAction {
     object Help : KateAction()
     object Weather : KateAction()
     data class WebSearch(val query: String, val openBrowser: Boolean) : KateAction()
+    data class PlayMusic(val song: String) : KateAction()
     object Unknown : KateAction()
 }
 
@@ -100,6 +101,15 @@ class KateResponseGenerator {
                 if (name.isNotBlank()) KateAction.SendMessage(name, body) else KateAction.Unknown
             }
 
+            lower.startsWith("play ") -> {
+                // "play <song>" or "play <song> on spotify/audiomack" - the
+                // app suffix is just stripped here since MusicLauncher picks
+                // whichever app is actually installed, preferring Spotify.
+                var song = extractAfterTrigger(lower, listOf("play "))
+                song = song.removeSuffix(" on spotify").removeSuffix(" on audiomack").trim()
+                if (song.isNotBlank()) KateAction.PlayMusic(song) else KateAction.Unknown
+            }
+
             lower.startsWith("open ") || lower.contains(" open ") ||
                 lower.startsWith("launch ") || lower.startsWith("start ") -> {
                 val app = extractAfterTrigger(lower, listOf("open ", "launch ", "start ", "run "))
@@ -147,6 +157,24 @@ class KateResponseGenerator {
     }
 
     // ==================== RESPONSE PHRASING ====================
+
+    fun speechForPlayMusic(song: String, app: com.dti.kate.core.MusicApp, tone: KateTone): String = when (app) {
+        com.dti.kate.core.MusicApp.SPOTIFY -> pick("play_music.spotify.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Searching Spotify for $song.")
+            KateTone.BALANCED -> listOf("Pulling up $song on Spotify.")
+            KateTone.SASSY -> listOf("Spotify's got $song, going to find it now.")
+        })
+        com.dti.kate.core.MusicApp.AUDIOMACK -> pick("play_music.audiomack.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Opening Audiomack - search for $song there.")
+            KateTone.BALANCED -> listOf("Opening Audiomack for you - look up $song once it's open.")
+            KateTone.SASSY -> listOf("Audiomack's open. You'll have to type $song in yourself though.")
+        })
+        com.dti.kate.core.MusicApp.NONE -> pick("play_music.none.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("I couldn't find Spotify or Audiomack installed.")
+            KateTone.BALANCED -> listOf("You don't have Spotify or Audiomack installed.")
+            KateTone.SASSY -> listOf("No Spotify, no Audiomack - how do you listen to music?")
+        })
+    }
 
     fun speechForOpenApp(appName: String, tone: KateTone): String = pick("open_app.$tone", when (tone) {
         KateTone.PROFESSIONAL -> listOf(
