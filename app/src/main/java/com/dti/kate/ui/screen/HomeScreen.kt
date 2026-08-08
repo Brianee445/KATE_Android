@@ -70,6 +70,7 @@ fun HomeScreen(
     val locationHelper = remember { LocationHelper(context) }
     val audioCapture = remember { AudioCapture() }
     val appLauncher = remember { AppLauncher(context) }
+    val musicLauncher = remember { MusicLauncher(context) }
     val kateApiClient = remember { com.dti.kate.network.KateApiClient(context) }
     val repository = remember { com.dti.kate.repository.Repository(context.applicationContext) }
     val recordedAudioBuffer = remember { java.io.ByteArrayOutputStream() }
@@ -78,6 +79,7 @@ fun HomeScreen(
     var lastReply by remember { mutableStateOf("") }
     var voskReady by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Warming up Kate...") }
+    var sttSourceLabel by remember { mutableStateOf<String?>(null) }
     var listenJobActive by remember { mutableStateOf(false) }
 
     val liveTranscription by voskManager.transcription.collectAsState()
@@ -248,6 +250,10 @@ fun HomeScreen(
                     "I couldn't find an app called ${action.appName} on this device."
                 }
             }
+            is KateAction.PlayMusic -> {
+                val musicApp = musicLauncher.playSong(action.song)
+                responseGenerator.speechForPlayMusic(action.song, musicApp, tone)
+            }
             is KateAction.TypeText -> {
                 if (!KateAccessibilityService.isEnabled(context)) {
                     KateAccessibilityService.openAccessibilitySettings(context)
@@ -383,9 +389,13 @@ fun HomeScreen(
                 if (cloudText != null) {
                     usedCloud = true
                     confidence = cloudResult.confidence
+                    sttSourceLabel = "☁️ Cloud (Deepgram)"
+                } else {
+                    sttSourceLabel = "📱 On-device (cloud unavailable)"
                 }
                 cloudText ?: localText
             } else {
+                sttSourceLabel = if (!NetworkMonitor.isOnline(context)) "📱 On-device (offline)" else "📱 On-device"
                 localText
             }
             handleQuery(finalText ?: "", usedCloud, confidence)
@@ -407,6 +417,7 @@ fun HomeScreen(
     fun buildCommandGrammar(): List<String> {
         val staticWords = listOf(
             "weather", "temperature", "forecast",
+            "play", "music", "song", "spotify", "audiomack",
             "torch", "flashlight", "flash", "on", "off", "turn",
             "bluetooth", "wifi", "wi-fi",
             "volume", "up", "down", "increase", "decrease", "mute", "set",
@@ -574,6 +585,16 @@ fun HomeScreen(
                 Text(
                     text = statusMessage,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            sttSourceLabel?.let { label ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary,
                     textAlign = TextAlign.Center,
                 )
