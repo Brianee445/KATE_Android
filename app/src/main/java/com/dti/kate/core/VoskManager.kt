@@ -89,6 +89,18 @@ class VoskManager(private val context: Context) {
     }
 
     suspend fun initialize(callback: (Boolean) -> Unit) = withContext(Dispatchers.IO) {
+        // Idempotency guard: if we already have a working model+recognizer,
+        // repeated initialize() calls (e.g. from HomeScreen's LaunchedEffect
+        // re-running on navigation) must be a cheap no-op. Without this,
+        // every redundant call reloaded the full ~128MB model from disk
+        // AND leaked the previous Model/Recognizer's native memory, since
+        // reassigning the variable doesn't call close() on what it held.
+        if (model != null && recognizer != null && _status.value == VoskStatus.Ready) {
+            DebugLog.log(context, TAG, "initialize() skipped - already initialized")
+            callback(true)
+            return@withContext
+        }
+
         try {
             _status.value = VoskStatus.Initializing
             Log.d(TAG, "Initializing org.vosk speech engine...")
@@ -103,6 +115,14 @@ class VoskManager(private val context: Context) {
             }
 
             recognizerLock.withLock {
+                // Release any existing native resources before replacing
+                // them - see the idempotency guard's comment above for why
+                // this matters. Normally unreachable given that guard, but
+                // kept as a defensive backstop (e.g. a prior failed/partial
+                // init that left a Recognizer without a Ready status).
+                try { recognizer?.close() } catch (e: Exception) { /* already closed or never valid */ }
+                try { model?.close() } catch (e: Exception) { /* already closed or never valid */ }
+
                 model = Model(modelDirPath)
                 recognizer = Recognizer(model, SAMPLE_RATE)
             }
