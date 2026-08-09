@@ -57,7 +57,7 @@ class VoskManager(private val context: Context) {
     companion object {
         private const val TAG = "VoskManager"
         private const val MODEL_DIR = "vosk-model"
-        private const val MODEL_NAME = "vosk-model-en-us-0.22-lgraph"
+        private const val MODEL_NAME = "vosk-model-en-us-daanzu-20200905-lgraph"
         private const val ZIP_NAME = "$MODEL_NAME.zip"
         private const val SAMPLE_RATE = 16000f
     }
