@@ -161,6 +161,38 @@ class KateForegroundService : Service() {
         return START_STICKY
     }
 
+    // Called when the user swipes the app away from recents. START_STICKY
+    // alone isn't enough on all OEMs to guarantee a prompt restart - a
+    // sibling Kate project hit this exact issue and documented the fix:
+    // explicitly schedule a restart via AlarmManager rather than relying
+    // on the OS's own sticky-service recovery, which can be delayed or
+    // skipped entirely by aggressive OEM battery/task management (this
+    // device's Transsion skin has shown that behavior repeatedly
+    // elsewhere in this app - foreground service kills, Doze throttling
+    // of the wake-gesture sensor listener, etc). Without this, swiping
+    // Kate away can leave wake-gesture detection dead until the user
+    // manually reopens the app.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        try {
+            val restartIntent = Intent(applicationContext, KateForegroundService::class.java)
+            val pendingIntent = android.app.PendingIntent.getService(
+                applicationContext, 1, restartIntent,
+                android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            alarmManager.set(
+                android.app.AlarmManager.ELAPSED_REALTIME,
+                android.os.SystemClock.elapsedRealtime() + 1000,
+                pendingIntent
+            )
+        } catch (e: Exception) {
+            // Scheduling the restart failing shouldn't crash whatever's
+            // tearing the task down - worst case we fall back to plain
+            // START_STICKY behavior.
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(powerReceiver)
