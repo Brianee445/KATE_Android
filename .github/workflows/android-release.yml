@@ -122,14 +122,14 @@ jobs:
           mkdir -p app/src/main/assets
           if [ ! -d "app/src/main/assets/vosk-model" ]; then
             curl -fL -o /tmp/vosk-model.zip \
-              "https://alphacephei.com/vosk/models/vosk-model-en-us-0.22-lgraph.zip"
+              "https://alphacephei.com/vosk/models/vosk-model-en-us-daanzu-20200905-lgraph.zip"
             unzip -q /tmp/vosk-model.zip -d app/src/main/assets/
-            mv app/src/main/assets/vosk-model-en-us-0.22-lgraph app/src/main/assets/vosk-model
+            mv app/src/main/assets/vosk-model-en-us-daanzu-20200905-lgraph app/src/main/assets/vosk-model
             if [ ! -d "app/src/main/assets/vosk-model/am" ] || [ ! -d "app/src/main/assets/vosk-model/conf" ]; then
               echo "❌ Vosk model missing am/ or conf/ after extraction - aborting."
               exit 1
             fi
-            echo "✅ Vosk model (en-us-0.22-lgraph) downloaded to assets"
+            echo "✅ Vosk model (daanzu-20200905-lgraph) downloaded to assets"
           else
             echo "Vosk model already exists"
           fi
