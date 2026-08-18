@@ -172,6 +172,70 @@ class DeviceControlManager(private val context: Context) {
         }
     }
 
+    /**
+     * Stock ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS is necessary but NOT
+     * sufficient on Transsion's HiOS/XOS skin (Tecno/Infinix/itel) - it layers
+     * its own "Autostart"/"Protected Apps" permission on top of stock
+     * Doze, and a foreground service + sensor listener still gets killed
+     * without it even when battery-optimization-exempt. There's no public
+     * AOSP API for this - only vendor-specific settings screens, reached by
+     * deep-linking their package/activity directly. This is the same
+     * "Doze throttling of the wake-gesture sensor listener" behavior noted
+     * in KateForegroundService.onTaskRemoved.
+     *
+     * Best-effort: tries each known Transsion-family autostart screen in
+     * turn, falls back to the app's own battery-usage detail settings page
+     * (where the user can usually find an equivalent toggle manually) if
+     * none resolve. Returns true if a screen was actually launched.
+     */
+    fun requestAutostartPermission(): Boolean {
+        val candidates = listOf(
+            Intent().setClassName("com.transsion.phonemanager", "com.transsion.phonemanager.MainActivity"),
+            Intent().setClassName("com.itel.autobootmanager", "com.itel.autobootmanager.activity.AutoBootMainActivity"),
+            Intent().setClassName("com.transsion.batterylab", "com.transsion.batterylab.ui.activity.SmartLimitActivity"),
+            Intent("miui.intent.action.OP_AUTO_START").addCategory(Intent.CATEGORY_DEFAULT),
+            Intent().setClassName(
+                "com.miui.securitycenter",
+                "com.miui.permcenter.autostart.AutoStartManagementActivity"
+            ),
+        )
+
+        for (intent in candidates) {
+            try {
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                if (intent.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(intent)
+                    Log.d(TAG, "Launched autostart settings: ${intent.component}")
+                    return true
+                }
+            } catch (e: Exception) {
+                // Try the next candidate - these are unofficial vendor
+                // screens that can legitimately not exist on a given
+                // firmware build.
+            }
+        }
+
+        Log.w(TAG, "No known autostart settings screen resolved, falling back to app details")
+        return try {
+            val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(fallback)
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open app details fallback: ${e.message}")
+            false
+        }
+    }
+
+    /** True on Transsion-family devices (Tecno/Infinix/itel - HiOS/XOS) where requestAutostartPermission is relevant. Other OEMs' equivalents (MIUI etc.) are attempted opportunistically above but not gated behind this. */
+    fun isTranssionDevice(): Boolean {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val brand = Build.BRAND.lowercase()
+        return listOf("transsion", "tecno", "infinix", "itel").any { it in manufacturer || it in brand }
+    }
+
     // ========================================================================
     // 3. BLUETOOTH CONTROL
     // ========================================================================
