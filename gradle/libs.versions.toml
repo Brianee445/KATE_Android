@@ -40,6 +40,11 @@ vosk               = "0.3.47"
 tensorflow-lite    = "2.17.0"
 # NOTE: tensorflow-lite-support uses its own independent version scheme —
 # it never had a "2.17.0" release (that's the tensorflow-lite core scheme).
+# Piper TTS (piper-plus, MIT-licensed fork - see training/tts/README.md for
+# why not the official rhasspy/piper-phonemize, which is archived, or
+# OHF-Voice/piper1-gpl, which is GPL-3.0).
+onnxruntime-android = "1.20.0"
+piper-plus-g2p-android = "1.0.0"
 # Latest available is 0.5.0. Also note this artifact is deprecated upstream,
 # relocated to com.google.ai.edge.litert:litert-support — fine to keep using
 # 0.5.0 for now, migrate later on its own.
@@ -111,6 +116,8 @@ jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 vosk-android = { group = "com.alphacephei", name = "vosk-android", version.ref = "vosk" }
 tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflow-lite" }
 tensorflow-lite-support = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "tensorflow-lite-support" }
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime-android" }
+piper-plus-g2p-android = { group = "io.github.ayutaz", name = "piper-plus-g2p-android", version.ref = "piper-plus-g2p-android" }
 
 # ==================== IMAGE LOADING ====================
 # NOTE: Coil 3.x renamed its group from io.coil-kt to io.coil-kt.coil3 so v2
