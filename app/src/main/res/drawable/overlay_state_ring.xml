@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stroke color/width overwritten programmatically per state in
+     KateOverlayService.setState() - this is just the base shape, sized
+     larger than the 64dp avatar bubble so it renders as a ring around it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <stroke
+        android:width="3dp"
+        android:color="#FFA79AB8" />
+    <solid android:color="@android:color/transparent" />
+</shape>
