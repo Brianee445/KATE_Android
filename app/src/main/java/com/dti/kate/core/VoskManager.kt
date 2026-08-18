@@ -57,7 +57,13 @@ class VoskManager(private val context: Context) {
     companion object {
         private const val TAG = "VoskManager"
         private const val MODEL_DIR = "vosk-model"
-        private const val MODEL_NAME = "vosk-model-en-us-daanzu-20200905-lgraph"
+
+        // Was vosk-model-en-us-daanzu-20200905-lgraph (2020). 0.22-lgraph is
+        // similar footprint with meaningfully better WER. Release CI
+        // (android-release.yml "Download Vosk model for CI build") fetches
+        // this fresh into assets/vosk-model/ every release build, so this
+        // constant is the only place the version needs to match.
+        private const val MODEL_NAME = "vosk-model-en-us-0.22-lgraph"
         private const val ZIP_NAME = "$MODEL_NAME.zip"
         private const val SAMPLE_RATE = 16000f
     }

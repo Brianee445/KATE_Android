@@ -14,6 +14,8 @@ class LocalSettingsStore(context: Context) {
         private const val KEY_RAISE_ENABLED = "wake_raise_enabled"
         private const val KEY_SHAKE_ENABLED = "wake_shake_enabled"
         private const val KEY_SYNC_TRAINING = "sync_training_enabled"
+        private const val KEY_AUTOSTART_PROMPTED = "autostart_permission_prompted"
+        private const val KEY_WAKE_WORD_ENABLED = "wake_word_enabled"
     }
 
     fun getToneLevel(): Float = prefs.getFloat(KEY_TONE, 0.5f)
@@ -37,6 +39,15 @@ class LocalSettingsStore(context: Context) {
     // on every voice interaction without a network call.
     fun getSyncTrainingEnabled(): Boolean = prefs.getBoolean(KEY_SYNC_TRAINING, true)
     fun setSyncTrainingEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_SYNC_TRAINING, value).apply()
+
+    // Gates the one-time Transsion autostart-permission prompt (see
+    // DeviceControlManager.requestAutostartPermission) so it fires once per
+    // install, not on every KateNavHost composition.
+    fun getAutostartPrompted(): Boolean = prefs.getBoolean(KEY_AUTOSTART_PROMPTED, false)
+    fun setAutostartPrompted(value: Boolean) = prefs.edit().putBoolean(KEY_AUTOSTART_PROMPTED, value).apply()
+
+    fun getWakeWordEnabled(): Boolean = prefs.getBoolean(KEY_WAKE_WORD_ENABLED, true)
+    fun setWakeWordEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_WAKE_WORD_ENABLED, value).apply()
 
     fun resetToDefaults() {
         prefs.edit().clear().apply()
