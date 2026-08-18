@@ -3,11 +3,22 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
+    <!-- State ring - pulses/tints per KateOverlayService.setState(). Sized
+         larger than the bubble beneath it so it reads as a ring around the
+         avatar, not a border on it. Starts invisible (idle = no pulse). -->
+    <View
+        android:id="@+id/state_ring"
+        android:layout_width="88dp"
+        android:layout_height="88dp"
+        android:layout_gravity="center"
+        android:background="@drawable/overlay_state_ring" />
+
     <!-- Bubble View -->
     <FrameLayout
         android:id="@+id/overlay_bubble"
         android:layout_width="64dp"
         android:layout_height="64dp"
+        android:layout_gravity="center"
         android:background="@drawable/overlay_bubble_background"
         android:elevation="8dp">
 
