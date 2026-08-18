@@ -230,6 +230,12 @@ dependencies {
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
 
+    // Piper TTS (piper-plus, MIT) - see training/tts/README.md for the
+    // licensing rationale over the official rhasspy/piper-phonemize
+    // (archived) or OHF-Voice/piper1-gpl (GPL-3.0).
+    implementation(libs.onnxruntime.android)
+    implementation(libs.piper.plus.g2p.android)
+
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 
