@@ -1,5 +1,6 @@
 package com.dti.kate.service
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,22 +9,34 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
-import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.dti.kate.R
 import com.dti.kate.core.KateResponseGenerator
 import com.dti.kate.core.KateWakeSignal
 import com.dti.kate.core.LocalSettingsStore
+import com.dti.kate.core.MicArbiter
 import com.dti.kate.core.toneFromSlider
 import com.dti.kate.ui.KateActivity
+import com.dti.kate.wakeword.MelSpectrogram
+import com.dti.kate.wakeword.WakeWordDetector
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlin.math.sqrt
-import java.util.Locale
 
 class KateForegroundService : Service() {
 
@@ -41,7 +54,7 @@ class KateForegroundService : Service() {
         private const val RAISE_COOLDOWN_MS = 2000L
     }
 
-    private var tts: TextToSpeech? = null
+    private lateinit var ttsEngine: KateTtsEngine
     private var isTtsReady = false
     private var pendingSpeech: String? = null
     private lateinit var localSettings: LocalSettingsStore
@@ -52,6 +65,33 @@ class KateForegroundService : Service() {
     private var lastRaiseTime = 0L
     private var lastZ = 0f
     private var hasLastZ = false
+
+    // --- Wake word ("Hey Kate") ---
+    // Runs a small always-on TFLite classifier over a continuous low-duty
+    // AudioRecord, separate from HomeScreen's AudioCapture (which is
+    // scoped to an active command-listening session). Paused whenever
+    // HomeScreen owns the mic - see MicArbiter's class doc for why two
+    // concurrent AudioRecord instances is a bad idea across OEMs.
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var wakeWordDetector: WakeWordDetector? = null
+    private var wakeWordAudioRecord: AudioRecord? = null
+    private var wakeWordJob: Job? = null
+
+    // Reacts to the "Hey Kate" toggle in Settings while the service is
+    // already running - without this, flipping it off wouldn't take effect
+    // until the next time HomeScreen starts/stops a capture session (which
+    // is what otherwise re-checks localSettings.getWakeWordEnabled()).
+    private val settingsChangeListener =
+        android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == "wake_word_enabled") {
+                val enabled = prefs.getBoolean(key, true)
+                if (enabled && !MicArbiter.appIsCapturing.value) {
+                    startWakeWordListening()
+                } else if (!enabled) {
+                    stopWakeWordListening()
+                }
+            }
+        }
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
@@ -105,13 +145,35 @@ class KateForegroundService : Service() {
     }
 
     private fun onWakeGestureDetected() {
-        // Bring Kate to the foreground, then signal HomeScreen to start
-        // listening once it's visible.
-        val launchIntent = Intent(this, KateActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+        // Fresh installs (never completed sign-in/onboarding) have nothing
+        // for the overlay to act on yet - only that case still opens the
+        // app. Every other trigger (shake/raise/wake word) now stays as
+        // the floating bubble and never opens KateActivity - see
+        // KateOverlayService's class doc for why this used to always open
+        // the app regardless.
+        val isAuthenticated = com.dti.kate.repository.Repository(applicationContext).isAuthenticated()
+        if (!isAuthenticated) {
+            val launchIntent = Intent(this, KateActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            }
+            startActivity(launchIntent)
+            KateWakeSignal.trigger()
+            return
         }
-        startActivity(launchIntent)
-        KateWakeSignal.trigger()
+
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            // No overlay permission - fall back to the old behavior rather
+            // than silently doing nothing on a gesture the user just
+            // triggered on purpose.
+            val launchIntent = Intent(this, KateActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            }
+            startActivity(launchIntent)
+            KateWakeSignal.trigger()
+            return
+        }
+
+        com.dti.kate.ui.overlay.KateOverlayService.activate(applicationContext)
     }
 
     private val powerReceiver = object : BroadcastReceiver() {
@@ -133,13 +195,13 @@ class KateForegroundService : Service() {
         localSettings = LocalSettingsStore(this)
         createNotificationChannel()
 
-        tts = TextToSpeech(this) { status ->
-            isTtsReady = (status == TextToSpeech.SUCCESS)
-            if (isTtsReady) {
-                pendingSpeech?.let { queued ->
-                    pendingSpeech = null
-                    speak(queued)
-                }
+        ttsEngine = KateTtsEngine(this)
+        serviceScope.launch {
+            ttsEngine.initialize()
+            isTtsReady = true
+            pendingSpeech?.let { queued ->
+                pendingSpeech = null
+                speak(queued)
             }
         }
 
@@ -154,6 +216,100 @@ class KateForegroundService : Service() {
         if (accelerometer != null) {
             sensorManager?.registerListener(sensorListener, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
         }
+
+        setUpWakeWord()
+        applicationContext
+            .getSharedPreferences("kate_local_settings", Context.MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(settingsChangeListener)
+
+        // Bubble should be visible on any screen once the user's set up -
+        // not just conjured during a gesture cycle. onWakeGestureDetected()
+        // already checks canDrawOverlays before routing there; same check
+        // here so this is a no-op until the permission's granted.
+        val isAuthenticated = com.dti.kate.repository.Repository(applicationContext).isAuthenticated()
+        if (isAuthenticated && android.provider.Settings.canDrawOverlays(this)) {
+            com.dti.kate.ui.overlay.KateOverlayService.ensureShowing(applicationContext)
+        }
+    }
+
+    /**
+     * Loads the wake-word model (if bundled/trained - see WakeWordDetector's
+     * class doc) and, if the user has the "Hey Kate" trigger enabled, starts
+     * the always-on listening loop. Also subscribes to MicArbiter so the
+     * loop yields the mic whenever HomeScreen starts an active
+     * command-listening session, and reclaims it when that session ends.
+     */
+    private fun setUpWakeWord() {
+        val detector = WakeWordDetector(applicationContext)
+        wakeWordDetector = detector
+
+        serviceScope.launch {
+            val loaded = detector.initialize()
+            if (!loaded) return@launch // no model bundled yet - feature silently stays off
+
+            serviceScope.launch {
+                MicArbiter.appIsCapturing.collect { appCapturing ->
+                    if (appCapturing) {
+                        stopWakeWordListening()
+                    } else if (localSettings.getWakeWordEnabled()) {
+                        startWakeWordListening()
+                    }
+                }
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission") // service is only started from KateNavHost after RECORD_AUDIO is confirmed granted
+    private fun startWakeWordListening() {
+        if (wakeWordJob != null) return // already running
+        val detector = wakeWordDetector ?: return
+        if (!detector.isReady) return
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+
+        val minBufferSize = AudioRecord.getMinBufferSize(
+            MelSpectrogram.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+        )
+        if (minBufferSize <= 0) return
+
+        val record = AudioRecord(
+            MediaRecorder.AudioSource.MIC, // see AudioCapture's doc on why MIC over VOICE_RECOGNITION on this device family
+            MelSpectrogram.SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            minBufferSize * 2,
+        )
+        if (record.state != AudioRecord.STATE_INITIALIZED) {
+            record.release()
+            return
+        }
+
+        wakeWordAudioRecord = record
+        record.startRecording()
+
+        wakeWordJob = serviceScope.launch {
+            val buffer = ByteArray(minBufferSize)
+            while (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                val read = record.read(buffer, 0, buffer.size)
+                if (read > 0) {
+                    val detected = detector.feedAudio(buffer.copyOf(read))
+                    if (detected) {
+                        onWakeGestureDetected()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopWakeWordListening() {
+        wakeWordJob?.cancel()
+        wakeWordJob = null
+        wakeWordAudioRecord?.let {
+            try {
+                if (it.state == AudioRecord.STATE_INITIALIZED) it.stop()
+            } catch (e: Exception) { /* already stopped */ }
+            it.release()
+        }
+        wakeWordAudioRecord = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -197,23 +353,28 @@ class KateForegroundService : Service() {
         super.onDestroy()
         unregisterReceiver(powerReceiver)
         sensorManager?.unregisterListener(sensorListener)
-        tts?.stop()
-        tts?.shutdown()
-        tts = null
+        ttsEngine.close()
+
+        stopWakeWordListening()
+        wakeWordDetector?.close()
+        wakeWordDetector = null
+        serviceScope.cancel()
+        applicationContext
+            .getSharedPreferences("kate_local_settings", Context.MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(settingsChangeListener)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun speak(text: String) {
-        val tone = toneFromSlider(localSettings.getToneLevel())
-        val rate = when (tone) {
-            com.dti.kate.core.KateTone.PROFESSIONAL -> 0.95f
-            com.dti.kate.core.KateTone.BALANCED -> 1.0f
-            com.dti.kate.core.KateTone.SASSY -> 1.05f
-        }
-        tts?.setSpeechRate(rate)
-        tts?.language = Locale.US
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "kate_charging_event")
+        // NOTE: the previous per-utterance speech-rate tweak by tone
+        // (platform TextToSpeech.setSpeechRate) doesn't have an equivalent
+        // in KateTtsEngine's unified API yet, since Piper's speed knob
+        // (length_scale) lives in the voice config rather than being an
+        // easy per-call parameter. Dropped for now rather than special-
+        // cased per engine - worth adding back to KateTtsEngine if the
+        // tone-based rate change turns out to matter in practice.
+        serviceScope.launch { ttsEngine.speakAndAwait(text) }
     }
 
     private fun createNotificationChannel() {
