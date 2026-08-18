@@ -182,6 +182,7 @@ fun HomeScreen(
             if (!reheard.isCompleted) reheard.complete(null)
         }
 
+        com.dti.kate.core.MicArbiter.setCapturing(true)
         audioCapture.start(context, coroutineScope) { chunk ->
             val finalResult = voskManager.feedAudio(chunk)
             if (finalResult != null && !reheard.isCompleted) {
@@ -192,6 +193,7 @@ fun HomeScreen(
         val heardDuringCapture = reheard.await()
         timeoutJob.cancel()
         audioCapture.stop()
+        com.dti.kate.core.MicArbiter.setCapturing(false)
         val finalText = heardDuringCapture ?: voskManager.stopListening()
         voskManager.restoreDefaultRecognizer()
 
@@ -229,6 +231,26 @@ fun HomeScreen(
         }
     }
 
+    val commandProcessor = remember {
+        KateCommandProcessor(
+            context = context,
+            responseGenerator = responseGenerator,
+            deviceControl = deviceControl,
+            weatherService = weatherService,
+            webSearchService = webSearchService,
+            appLauncher = appLauncher,
+            musicLauncher = musicLauncher,
+            contactsHelper = contactsHelper,
+            locationHelper = locationHelper,
+            permissionBridge = object : KateCommandProcessor.PermissionBridge {
+                override fun hasContacts() = contactsPermission.status.isGranted
+                override fun hasLocation() = locationPermission.status.isGranted
+                override fun requestContacts() = contactsPermission.launchPermissionRequest()
+                override fun requestLocation() = locationPermission.launchPermissionRequest()
+            },
+        )
+    }
+
     suspend fun handleQuery(query: String, usedCloud: Boolean = false, confidence: Float = 0f) {
         val tone = toneFromSlider(localSettings.getToneLevel())
 
@@ -240,58 +262,14 @@ fun HomeScreen(
 
         kateState = KateState.PROCESSING
 
+        // MakeCall/SendMessage with no fuzzy-match still benefit from the
+        // richer in-app flow (asks "who do you mean" and re-listens with a
+        // name grammar) - that interactive sub-flow lives here rather than
+        // in the shared KateCommandProcessor, which only does the fast
+        // path. Everything else routes through the shared processor so
+        // HomeScreen and the overlay stay in lockstep.
         val action = responseGenerator.classify(query)
         val reply: String = when (action) {
-            is KateAction.OpenApp -> {
-                val opened = appLauncher.openAppByName(action.appName)
-                if (opened) {
-                    responseGenerator.speechForOpenApp(action.appName, tone)
-                } else {
-                    "I couldn't find an app called ${action.appName} on this device."
-                }
-            }
-            is KateAction.PlayMusic -> {
-                val musicApp = musicLauncher.playSong(action.song)
-                responseGenerator.speechForPlayMusic(action.song, musicApp, tone)
-            }
-            is KateAction.TypeText -> {
-                if (!KateAccessibilityService.isEnabled(context)) {
-                    KateAccessibilityService.openAccessibilitySettings(context)
-                    "I need accessibility access to type for you - please turn it on for Kate."
-                } else {
-                    val typed = KateAccessibilityService.instance?.typeText(action.text) ?: false
-                    if (typed) "Typed it." else "I couldn't find a text field to type into."
-                }
-            }
-            is KateAction.ToggleTorch -> {
-                val turningOn = action.turnOn ?: !deviceControl.isTorchOn()
-                deviceControl.setTorch(turningOn)
-                responseGenerator.speechForTorch(turningOn, tone)
-            }
-            is KateAction.ToggleBluetooth -> {
-                when (action.turnOn) {
-                    true -> deviceControl.setBluetooth(true)
-                    false -> deviceControl.setBluetooth(false)
-                    null -> deviceControl.toggleBluetooth()
-                }
-                responseGenerator.speechForBluetooth(action.turnOn, tone)
-            }
-            is KateAction.ToggleWifi -> {
-                when (action.turnOn) {
-                    true -> deviceControl.setWifi(true)
-                    false -> deviceControl.setWifi(false)
-                    null -> deviceControl.toggleWifi()
-                }
-                responseGenerator.speechForWifi(action.turnOn, tone)
-            }
-            is KateAction.SetVolume -> {
-                when {
-                    action.level != null -> deviceControl.setVolume(action.level)
-                    action.increase == true -> deviceControl.increaseVolume()
-                    action.increase == false -> deviceControl.decreaseVolume()
-                }
-                responseGenerator.speechForVolume(tone)
-            }
             is KateAction.MakeCall -> {
                 if (!contactsPermission.status.isGranted) {
                     contactsPermission.launchPermissionRequest()
@@ -321,30 +299,7 @@ fun HomeScreen(
                     }
                 }
             }
-            is KateAction.Weather -> {
-                if (!locationPermission.status.isGranted) {
-                    locationPermission.launchPermissionRequest()
-                    "I need location access to check the weather - please grant it and try again."
-                } else {
-                    val coords = locationHelper.getLastKnownLocation()
-                    if (coords == null) {
-                        responseGenerator.speechForWeather(null, tone)
-                    } else {
-                        val result = weatherService.getCurrentWeather(coords.first, coords.second)
-                        responseGenerator.speechForWeather(result, tone)
-                    }
-                }
-            }
-            is KateAction.WebSearch -> {
-                val answer = webSearchService.getInstantAnswer(action.query)
-                if (answer != null) {
-                    responseGenerator.speechForSearchAnswer(answer, tone)
-                } else {
-                    responseGenerator.speechForSearchNoAnswer(tone)
-                }
-            }
-            KateAction.Help -> responseGenerator.speechForHelp(tone)
-            KateAction.Unknown -> responseGenerator.speechForUnknown(tone)
+            else -> commandProcessor.process(query, tone).speech
         }
 
         lastReply = reply
@@ -365,6 +320,7 @@ fun HomeScreen(
         if (!listenJobActive) return
         listenJobActive = false
         audioCapture.stop()
+        com.dti.kate.core.MicArbiter.setCapturing(false)
         val localText = voskManager.stopListening()
         voskManager.restoreDefaultRecognizer()
         val bufferedAudio = recordedAudioBuffer.toByteArray()
@@ -453,6 +409,7 @@ fun HomeScreen(
         }
         if (!started) return
 
+        com.dti.kate.core.MicArbiter.setCapturing(true)
         kateState = KateState.LISTENING
         listenJobActive = true
         recordedAudioBuffer.reset()

@@ -67,6 +67,7 @@ class SettingsViewModel(private val context: Context) {
             wakeTriggers = listOf(
                 WakeTrigger("raise", "Raise to Wake", "Raise your phone to activate Kate", localStore.getRaiseToWakeEnabled()),
                 WakeTrigger("shake", "Shake", "Shake your phone to activate Kate", localStore.getShakeEnabled()),
+                WakeTrigger("wakeword", "\"Hey Kate\"", "Say the wake word to activate Kate", localStore.getWakeWordEnabled()),
             ),
         )
     )
@@ -125,9 +126,20 @@ class SettingsViewModel(private val context: Context) {
 
         val raise = newTriggers.firstOrNull { it.id == "raise" }?.enabled ?: true
         val shake = newTriggers.firstOrNull { it.id == "shake" }?.enabled ?: false
+        val wakeWord = newTriggers.firstOrNull { it.id == "wakeword" }?.enabled ?: true
         localStore.setRaiseToWakeEnabled(raise)
         localStore.setShakeEnabled(shake)
+        localStore.setWakeWordEnabled(wakeWord)
     }
+
+    /** Re-opens the OEM autostart settings screen (Transsion HiOS/XOS etc.) - for when the user dismissed the one-time prompt from KateActivity and background wake triggers keep dying. No-op button hidden entirely on non-Transsion devices, see SettingsScreen. */
+    fun fixBackgroundReliability() {
+        val deviceControl = com.dti.kate.utils.DeviceControlManager(context)
+        deviceControl.requestIgnoreBatteryOptimizations()
+        deviceControl.requestAutostartPermission()
+    }
+
+    fun isTranssionDevice(): Boolean = com.dti.kate.utils.DeviceControlManager(context).isTranssionDevice()
 
     fun updateTone(value: Float) {
         _settings.value = settings.value.copy(toneLevel = value)
@@ -319,6 +331,24 @@ fun SettingsScreen(
                     checked = trigger.enabled,
                     onCheckedChange = { viewModel.toggleWakeTrigger(trigger.id) },
                 )
+            }
+
+            if (viewModel.isTranssionDevice()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable { viewModel.fixBackgroundReliability() },
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        shape = KateShape.MD,
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(text = "Fix background reliability", style = MaterialTheme.typography.bodyMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "Your device's power saver can kill wake triggers in the background. Tap to re-open the permission screens that keep Kate running.",
+                                style = MaterialTheme.typography.bodySmall, color = TextSecondary,
+                            )
+                        }
+                    }
+                }
             }
 
             item { SettingsSectionHeader(title = "Personality") }
