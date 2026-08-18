@@ -54,7 +54,21 @@ fun KateNavHost(navController: NavHostController = rememberNavController()) {
             } else {
                 context.startService(serviceIntent)
             }
-            com.dti.kate.utils.DeviceControlManager(context).requestIgnoreBatteryOptimizations()
+            val deviceControl = com.dti.kate.utils.DeviceControlManager(context)
+            deviceControl.requestIgnoreBatteryOptimizations()
+
+            // One-time (per install) - stock battery-optimization exemption
+            // above isn't sufficient on Transsion's HiOS/XOS skin, which has
+            // its own separate Autostart/Protected-Apps permission that
+            // kills the foreground service + wake-gesture sensor listener
+            // regardless. Gated by a stored flag rather than firing every
+            // launch, since this opens a system settings screen and
+            // shouldn't nag.
+            val localSettings = com.dti.kate.core.LocalSettingsStore(context)
+            if (deviceControl.isTranssionDevice() && !localSettings.getAutostartPrompted()) {
+                localSettings.setAutostartPrompted(true)
+                deviceControl.requestAutostartPermission()
+            }
         }
     }
 
