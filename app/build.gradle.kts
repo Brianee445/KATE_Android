@@ -230,11 +230,14 @@ dependencies {
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
 
-    // Piper TTS (piper-plus, MIT) - see training/tts/README.md for the
-    // licensing rationale over the official rhasspy/piper-phonemize
-    // (archived) or OHF-Voice/piper1-gpl (GPL-3.0).
-    implementation(libs.onnxruntime.android)
-    implementation(libs.piper.plus.g2p.android)
+    // Piper TTS dependency intentionally removed - piper-plus-g2p-android
+    // requires Kotlin 2.1.0+, and with Piper on hold (Vosk/Google/Deepgram
+    // covers STT+TTS needs for now - see KateSttEngine and KateTtsEngine's
+    // platform-TTS fallback), keeping Kotlin at 2.0.21 and dropping this
+    // dependency avoids that whole compatibility problem rather than
+    // carrying it while unused. PiperTtsEngine.kt was deleted rather than
+    // left in the tree, since without this dependency it wouldn't compile
+    // at all - re-add both together if Piper comes back later.
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
