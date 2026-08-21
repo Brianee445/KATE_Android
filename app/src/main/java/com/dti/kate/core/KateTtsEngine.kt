@@ -7,34 +7,32 @@ import kotlinx.coroutines.CompletableDeferred
 import java.util.UUID
 
 /**
- * speakAndAwait(text) that prefers Piper (see PiperTtsEngine) when a voice
- * is bundled, and transparently falls back to Android's TextToSpeech
- * otherwise. Callers (KateOverlayService, KateForegroundService) don't need
- * their own fallback logic - this is the one place that decision lives.
+ * speakAndAwait(text) wrapping Android's platform TextToSpeech.
+ *
+ * This was previously a Piper-vs-platform-TTS chooser (see git history /
+ * PiperTtsEngine.kt if that comes back later) - Piper is on hold
+ * (piper-plus-g2p-android requires Kotlin 2.1.0+, not worth carrying that
+ * version bump for an unused dependency - see app/build.gradle.kts's
+ * comment where it was removed), so this is plain platform TTS for now.
+ * Kept as its own class rather than inlining TextToSpeech directly into
+ * every caller, so re-adding a Piper (or any other) engine later is a
+ * change in one place - KateOverlayService and KateForegroundService both
+ * already call this rather than TextToSpeech directly.
  */
 class KateTtsEngine(private val context: Context) {
 
-    private val piper = PiperTtsEngine(context)
     private var platformTts: TextToSpeech? = null
     private var isPlatformTtsReady = false
 
     suspend fun initialize() {
-        val piperReady = piper.initialize()
-        if (!piperReady) {
-            val ready = CompletableDeferred<Boolean>()
-            platformTts = TextToSpeech(context) { status ->
-                ready.complete(status == TextToSpeech.SUCCESS)
-            }
-            isPlatformTtsReady = ready.await()
+        val ready = CompletableDeferred<Boolean>()
+        platformTts = TextToSpeech(context) { status ->
+            ready.complete(status == TextToSpeech.SUCCESS)
         }
+        isPlatformTtsReady = ready.await()
     }
 
     suspend fun speakAndAwait(text: String) {
-        if (piper.isReady) {
-            piper.speakAndAwait(text)
-            return
-        }
-
         val engine = platformTts
         if (!isPlatformTtsReady || engine == null) return
 
@@ -51,12 +49,10 @@ class KateTtsEngine(private val context: Context) {
     }
 
     fun stop() {
-        piper.stop()
         platformTts?.stop()
     }
 
     fun close() {
-        piper.close()
         platformTts?.stop()
         platformTts?.shutdown()
         platformTts = null
