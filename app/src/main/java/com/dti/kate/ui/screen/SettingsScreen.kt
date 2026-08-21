@@ -46,6 +46,7 @@ data class SettingsState(
     val offlineMode: Boolean = false,
     val syncTraining: Boolean = true,
     val wakeTriggers: List<WakeTrigger> = emptyList(),
+    val sttMode: String = "classic",
 )
 
 data class SettingsUser(
@@ -64,6 +65,7 @@ class SettingsViewModel(private val context: Context) {
             toneLevel = localStore.getToneLevel(),
             timeoutSeconds = localStore.getTimeoutSeconds(),
             offlineMode = localStore.getOfflineMode(),
+            sttMode = localStore.getSttMode(),
             wakeTriggers = listOf(
                 WakeTrigger("raise", "Raise to Wake", "Raise your phone to activate Kate", localStore.getRaiseToWakeEnabled()),
                 WakeTrigger("shake", "Shake", "Shake your phone to activate Kate", localStore.getShakeEnabled()),
@@ -149,6 +151,11 @@ class SettingsViewModel(private val context: Context) {
     fun updateTimeout(value: Int) {
         _settings.value = settings.value.copy(timeoutSeconds = value)
         localStore.setTimeoutSeconds(value)
+    }
+
+    fun updateSttMode(mode: String) {
+        _settings.value = settings.value.copy(sttMode = mode)
+        localStore.setSttMode(mode)
     }
 
     fun toggleOfflineMode() {
@@ -378,6 +385,45 @@ fun SettingsScreen(
             }
 
             item { SettingsSectionHeader(title = "Listening") }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    shape = KateShape.MD,
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(text = "Recognition mode", style = MaterialTheme.typography.bodyMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "How Kate listens - higher modes may use your connection",
+                            style = MaterialTheme.typography.bodySmall, color = TextSecondary,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        listOf(
+                            Triple("classic", "Kate Classic", "Works fully offline, fastest to respond"),
+                            Triple("smart", "Kate Smart", "Better accuracy, uses your device's speech service"),
+                            Triple("pro", "Kate Pro", "Best accuracy, uses your connection"),
+                        ).forEach { (id, label, description) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.updateSttMode(id) }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = settings.sttMode == id,
+                                    onClick = { viewModel.updateSttMode(id) },
+                                    colors = RadioButtonDefaults.colors(selectedColor = Purple70),
+                                )
+                                Column {
+                                    Text(label, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                                    Text(description, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
