@@ -91,6 +91,7 @@ class KateOverlayService : Service() {
     private lateinit var audioCapture: AudioCapture
     private lateinit var localSettings: LocalSettingsStore
     private lateinit var commandProcessor: KateCommandProcessor
+    private lateinit var sttEngine: KateSttEngine
 
     private lateinit var ttsEngine: KateTtsEngine
 
@@ -115,6 +116,13 @@ class KateOverlayService : Service() {
         serviceScope.launch {
             voskManager.initialize { ready -> voskReady = ready }
         }
+
+        // Repository requires an authenticated user for transcribeCloud's
+        // token - null here just means "Kate Pro" quietly behaves like
+        // "Kate Classic" (see KateSttEngine's class doc), not an error.
+        val repo = com.dti.kate.repository.Repository(applicationContext)
+        val repository = if (repo.isAuthenticated()) repo else null
+        sttEngine = KateSttEngine(this, voskManager, audioCapture, localSettings, repository)
 
         ttsEngine = KateTtsEngine(this)
         serviceScope.launch { ttsEngine.initialize() }
@@ -171,7 +179,9 @@ class KateOverlayService : Service() {
         collapseTimer?.cancel()
 
         activeCycle = serviceScope.launch {
-            if (!voskReady) {
+            val mode = localSettings.getSttMode()
+            val needsVosk = mode != "smart" // Kate Smart (Google) doesn't touch Vosk at all - see KateSttEngine
+            if (needsVosk && !voskReady) {
                 // Model still loading (rare - only right after boot/device
                 // restart). Don't leave the user talking to a bubble that
                 // isn't listening.
@@ -215,27 +225,7 @@ class KateOverlayService : Service() {
         }
     }
 
-    private suspend fun listenForTranscript(): String? {
-        if (!voskManager.startListening()) return null
-
-        val reheard = CompletableDeferred<String?>()
-        val timeoutJob = serviceScope.launch {
-            delay(LISTEN_TIMEOUT_MS)
-            if (!reheard.isCompleted) reheard.complete(null)
-        }
-
-        audioCapture.start(this, serviceScope) { chunk ->
-            val finalResult = voskManager.feedAudio(chunk)
-            if (finalResult != null && !reheard.isCompleted) {
-                reheard.complete(finalResult)
-            }
-        }
-
-        val heard = reheard.await()
-        timeoutJob.cancel()
-        audioCapture.stop()
-        return heard ?: voskManager.stopListening()
-    }
+    private suspend fun listenForTranscript(): String? = sttEngine.listen(serviceScope, LISTEN_TIMEOUT_MS)
 
     private suspend fun speakAndAwait(text: String) = ttsEngine.speakAndAwait(text)
 
