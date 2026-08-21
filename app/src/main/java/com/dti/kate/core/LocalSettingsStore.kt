@@ -16,6 +16,7 @@ class LocalSettingsStore(context: Context) {
         private const val KEY_SYNC_TRAINING = "sync_training_enabled"
         private const val KEY_AUTOSTART_PROMPTED = "autostart_permission_prompted"
         private const val KEY_WAKE_WORD_ENABLED = "wake_word_enabled"
+        private const val KEY_STT_MODE = "stt_mode"
     }
 
     fun getToneLevel(): Float = prefs.getFloat(KEY_TONE, 0.5f)
@@ -48,6 +49,13 @@ class LocalSettingsStore(context: Context) {
 
     fun getWakeWordEnabled(): Boolean = prefs.getBoolean(KEY_WAKE_WORD_ENABLED, true)
     fun setWakeWordEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_WAKE_WORD_ENABLED, value).apply()
+
+    // "classic" (Vosk/local), "smart" (Google), "pro" (Deepgram cloud) -
+    // see KateSttEngine. Stored as the internal id, not the display name,
+    // so renaming "Kate Pro" etc. in the UI later doesn't touch stored
+    // prefs.
+    fun getSttMode(): String = prefs.getString(KEY_STT_MODE, "classic") ?: "classic"
+    fun setSttMode(value: String) = prefs.edit().putString(KEY_STT_MODE, value).apply()
 
     fun resetToDefaults() {
         prefs.edit().clear().apply()
