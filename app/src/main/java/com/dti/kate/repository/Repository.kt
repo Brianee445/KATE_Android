@@ -173,6 +173,28 @@ class Repository @Inject constructor(@ApplicationContext private val context: Co
     }
 
     /**
+     * Cloud transcription via the backend's Deepgram proxy (see
+     * transcribe.py's docstring - keys never touch the APK). Used by
+     * KateSttEngine's "Kate Pro" mode. Failures return Result.failure
+     * rather than throwing past this point - per the endpoint's own
+     * documented contract, this is a best-effort enhancement over local
+     * Vosk, never something the caller should treat as fatal.
+     */
+    suspend fun transcribeCloud(audioBytes: ByteArray, sampleRate: Int = 16000, channels: Int = 1): Result<TranscribeResponse> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = securePrefs.getAccessToken() ?: return@withContext Result.failure(Exception("Not logged in"))
+                val body = audioBytes.toRequestBody("application/octet-stream".toMediaTypeOrNull())
+                val part = MultipartBody.Part.createFormData("audio", "audio.pcm", body)
+                val response = api.transcribe("Bearer $token", part, sampleRate, channels)
+                Result.success(response)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
      * Uploads a batch of locally-logged voice interactions to the
      * training pipeline, gzipped as JSONL to match sync.py's actual
      * UploadFile contract. The caller (HomeScreen.maybeSyncVoiceLogs)
