@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.ContactsContract
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class Contact(val name: String, val phoneNumber: String)
 
@@ -30,9 +32,19 @@ class ContactsHelper(private val context: Context) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** Returns all contacts with a phone number, deduplicated by name (first number wins). */
-    fun getAllContacts(): List<Contact> {
-        if (!hasPermission()) return emptyList()
+    /**
+     * Returns all contacts with a phone number, deduplicated by name (first
+     * number wins). suspend + withContext(Dispatchers.IO) - this was
+     * previously a plain blocking fun, and every call site invoked it
+     * directly from a UI-thread coroutine (tap gesture handlers,
+     * LaunchedEffect) with no dispatch off Main. On a slow device with a
+     * large contacts list, ContactsProvider2's cross-process query +
+     * cursor iteration took long enough to hit Android's 5-second input
+     * dispatch timeout - confirmed via ANR trace, main thread blocked
+     * directly inside CursorWrapper.getString() called from this function.
+     */
+    suspend fun getAllContacts(): List<Contact> = withContext(Dispatchers.IO) {
+        if (!hasPermission()) return@withContext emptyList()
 
         val contacts = LinkedHashMap<String, String>() // name -> number, dedup by name
         val projection = arrayOf(
@@ -55,7 +67,7 @@ class ContactsHelper(private val context: Context) {
             }
         }
 
-        return contacts.map { (name, number) -> Contact(name, number) }
+        contacts.map { (name, number) -> Contact(name, number) }
     }
 
     /**
