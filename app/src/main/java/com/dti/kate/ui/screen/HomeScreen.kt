@@ -568,14 +568,14 @@ fun HomeScreen(
                         detectTapGestures(
                             onTap = {
                                 when (kateState) {
-                                    KateState.IDLE -> startListening(useCommandGrammar = true)
+                                    KateState.IDLE -> coroutineScope.launch { startListening(useCommandGrammar = true) }
                                     KateState.LISTENING -> stopListeningAndProcess()
                                     else -> { /* busy */ }
                                 }
                             },
                             onLongPress = {
                                 if (kateState == KateState.IDLE) {
-                                    startListening(useCommandGrammar = false)
+                                    coroutineScope.launch { startListening(useCommandGrammar = false) }
                                 }
                             },
                         )
