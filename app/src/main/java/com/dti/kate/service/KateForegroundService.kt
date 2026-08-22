@@ -23,6 +23,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.dti.kate.R
 import com.dti.kate.core.KateResponseGenerator
+import com.dti.kate.core.KateTtsEngine
 import com.dti.kate.core.KateWakeSignal
 import com.dti.kate.core.LocalSettingsStore
 import com.dti.kate.core.MicArbiter
