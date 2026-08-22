@@ -370,7 +370,7 @@ fun HomeScreen(
      * (long-press), since there's no fixed vocabulary to constrain a
      * search query or typed text to.
      */
-    fun buildCommandGrammar(): List<String> {
+    suspend fun buildCommandGrammar(): List<String> {
         val staticWords = listOf(
             "weather", "temperature", "forecast",
             "play", "music", "song", "spotify", "audiomack",
@@ -395,7 +395,7 @@ fun HomeScreen(
     }
 
     /** useCommandGrammar=true (default, tap) constrains recognition to known command vocabulary for accuracy. false (long-press) uses open dictation for search/free text. */
-    fun startListening(useCommandGrammar: Boolean = true) {
+    suspend fun startListening(useCommandGrammar: Boolean = true) {
         if (!micPermission.status.isGranted) {
             micPermission.launchPermissionRequest()
             return
