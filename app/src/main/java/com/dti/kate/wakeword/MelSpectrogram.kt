@@ -16,7 +16,7 @@ import kotlin.math.sin
  * change any constant here, change it in train_wake_word.py's
  * `extract_features()` too, and retrain.
  *
- *   Sample rate:    16000 Hz (matches AudioCapture / VoskManager)
+ *   Sample rate:    16000 Hz (matches AudioCapture)
  *   Window:         480 samples (30ms)
  *   Hop:            320 samples (20ms)
  *   FFT size:       512 (next pow2 >= window)
