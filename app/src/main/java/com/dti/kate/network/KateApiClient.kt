@@ -48,8 +48,8 @@ interface KateApiService {
 
     // ==================== TRANSCRIBE ====================
     // Raw PCM16 mono audio, proxied server-side to Deepgram - see
-    // VoskManager's transcribeCloud() for the client-side race-against-local
-    // logic this feeds into.
+    // Repository.transcribeCloud() / KateSttEngine's "Kate Pro" mode,
+    // which falls back to Kate Classic (Google) if this fails or times out.
     @Multipart
     @POST("api/v1/transcribe")
     suspend fun transcribe(
@@ -251,9 +251,9 @@ class KateApiClient(private val context: Context) {
     /**
      * Uploads raw PCM16 mono audio for cloud transcription. Returns null on
      * any failure (network, timeout, no auth, server error) rather than
-     * throwing - this is a best-effort accuracy enhancement over on-device
-     * Vosk, never a required path, so callers should treat null exactly
-     * like "cloud wasn't available right now" and fall back locally.
+     * throwing - this is a best-effort accuracy enhancement, never a
+     * required path, so callers should treat null exactly like "cloud
+     * wasn't available right now" and fall back to Kate Classic.
      */
     suspend fun transcribeAudio(
         audioBytes: ByteArray,
