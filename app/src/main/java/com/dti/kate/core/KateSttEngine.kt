@@ -63,32 +63,62 @@ class KateSttEngine(
     private val googleStt = GoogleSttEngine(context)
 
     suspend fun listen(scope: CoroutineScope): String? {
-        return when (localSettings.getSttMode()) {
+        val mode = localSettings.getSttMode()
+        DebugLog.log(context, "KateSttEngine", "listen() called, mode=$mode")
+        val result = when (mode) {
             "pro" -> listenPro(scope)
             else -> listenClassic()
         }
+        DebugLog.log(context, "KateSttEngine", "listen() returning: ${result?.let { "\"$it\"" } ?: "null"}")
+        return result
     }
 
     private suspend fun listenClassic(): String? {
-        if (!googleStt.isAvailable()) return null
-        return googleStt.listenOnce()
+        val available = googleStt.isAvailable()
+        DebugLog.log(context, "KateSttEngine", "listenClassic: googleStt.isAvailable()=$available")
+        if (!available) return null
+        val text = googleStt.listenOnce()
+        DebugLog.log(context, "KateSttEngine", "listenClassic: googleStt.listenOnce() -> ${text?.let { "\"$it\"" } ?: "null"}")
+        return text
     }
 
     private suspend fun listenPro(scope: CoroutineScope): String? {
-        if (repository == null) return listenClassic()
+        if (repository == null) {
+            DebugLog.log(context, "KateSttEngine", "listenPro: repository is null (not authenticated), falling back to Classic immediately")
+            return listenClassic()
+        }
 
         val rawAudio = captureRawAudioUntilSilence(scope)
+        DebugLog.log(context, "KateSttEngine", "listenPro: captured ${rawAudio?.size ?: 0} bytes of raw audio")
         if (rawAudio == null || rawAudio.isEmpty()) return listenClassic()
 
         val cloudResult = try {
             withTimeoutOrNull(CLOUD_TIMEOUT_MS) {
-                repository.transcribeCloud(rawAudio).getOrNull()
+                repository.transcribeCloud(rawAudio).fold(
+                    onSuccess = { it },
+                    onFailure = { e ->
+                        DebugLog.log(context, "KateSttEngine", "listenPro: transcribeCloud failed: ${e.javaClass.simpleName}: ${e.message}")
+                        null
+                    }
+                )
             }
         } catch (e: Exception) {
+            DebugLog.log(context, "KateSttEngine", "listenPro: transcribeCloud threw: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
 
-        return if (!cloudResult?.text.isNullOrBlank()) cloudResult!!.text else listenClassic()
+        if (cloudResult == null) {
+            DebugLog.log(context, "KateSttEngine", "listenPro: cloud call timed out (>${CLOUD_TIMEOUT_MS}ms) or returned no result")
+        } else {
+            DebugLog.log(context, "KateSttEngine", "listenPro: cloud returned text=\"${cloudResult.text}\"")
+        }
+
+        return if (!cloudResult?.text.isNullOrBlank()) {
+            cloudResult!!.text
+        } else {
+            DebugLog.log(context, "KateSttEngine", "listenPro: falling back to Classic")
+            listenClassic()
+        }
     }
 
     /**
