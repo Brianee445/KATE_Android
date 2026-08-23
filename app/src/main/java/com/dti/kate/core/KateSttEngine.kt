@@ -40,7 +40,18 @@ class KateSttEngine(
     private val repository: Repository?,
 ) {
     companion object {
-        private const val CLOUD_TIMEOUT_MS = 4000L
+        // Render.com's free tier spins the backend down after ~15min
+        // idle; the first request after that can take 30-50+ seconds to
+        // cold-start (loading the Python process/deps), independent of
+        // whether Deepgram credentials/credits are fine. 4000ms was too
+        // short and made every cold-start request look like a failure.
+        // 20s is a pragmatic middle ground: survives most cold starts
+        // without making a genuinely-stuck call feel endless. If cold
+        // starts are still an issue after this, the better fix is a
+        // fire-and-forget "wake up" ping to the backend as soon as the
+        // app opens, so the cold start overlaps with the user deciding
+        // to speak rather than blocking after they're done talking.
+        private const val CLOUD_TIMEOUT_MS = 20000L
 
         // How long continuous low-RMS audio must persist, after real speech
         // was already heard, before we treat the utterance as finished.
