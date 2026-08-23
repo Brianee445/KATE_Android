@@ -399,8 +399,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         listOf(
-                            Triple("classic", "Kate Classic", "Works fully offline, fastest to respond"),
-                            Triple("smart", "Kate Smart", "Better accuracy, uses your device's speech service"),
+                            Triple("classic", "Kate Classic", "Free, uses your device's speech service"),
                             Triple("pro", "Kate Pro", "Best accuracy, uses your connection"),
                         ).forEach { (id, label, description) ->
                             Row(

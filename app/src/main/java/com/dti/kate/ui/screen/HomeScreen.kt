@@ -35,24 +35,15 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 private enum class KateState { IDLE, LISTENING, PROCESSING, SPEAKING }
-
-// Mirrors the backend's MIN_AUDIO_BYTES floor (transcribe.py) - skips the
-// upload entirely for near-silent/too-short buffers rather than wasting a
-// round-trip on something the server would reject anyway. 16kHz mono
-// 16-bit = 32000 bytes/sec, so this is a ~0.3s floor.
-private const val MIN_CLOUD_AUDIO_BYTES = 9600
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
-    voskManager: VoskManager,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -73,16 +64,14 @@ fun HomeScreen(
     val musicLauncher = remember { MusicLauncher(context) }
     val kateApiClient = remember { com.dti.kate.network.KateApiClient(context) }
     val repository = remember { com.dti.kate.repository.Repository(context.applicationContext) }
-    val recordedAudioBuffer = remember { java.io.ByteArrayOutputStream() }
+    val authedRepository = if (repository.isAuthenticated()) repository else null
+    val sttEngine = remember { KateSttEngine(context, audioCapture, localSettings, authedRepository) }
 
     var kateState by remember { mutableStateOf(KateState.IDLE) }
     var lastReply by remember { mutableStateOf("") }
-    var voskReady by remember { mutableStateOf(false) }
-    var statusMessage by remember { mutableStateOf("Warming up Kate...") }
+    var statusMessage by remember { mutableStateOf("Tap for a command, hold to search") }
     var sttSourceLabel by remember { mutableStateOf<String?>(null) }
     var listenJobActive by remember { mutableStateOf(false) }
-
-    val liveTranscription by voskManager.transcription.collectAsState()
 
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var speechCompletion by remember { mutableStateOf<CompletableDeferred<Unit>?>(null) }
@@ -148,16 +137,17 @@ fun HomeScreen(
      * Resolves a spoken name to a device contact.
      *
      * Two layers, in order:
-     *  1. Fuzzy match against whatever open-vocabulary text Vosk already
-     *     produced. Fast, no extra round-trip, works fine when the name
-     *     came through reasonably intact.
-     *  2. Grammar-constrained re-listen: if that fails, prompt the user
-     *     and listen again with the recognizer restricted to just the
-     *     device's contact names (see VoskManager.startListeningWithGrammar).
-     *     This steers Vosk's own acoustic search toward the closest real
-     *     name using the full model, rather than fuzzy-matching after the
-     *     fact on free-form output - meaningfully better for names outside
-     *     the model's training data (many African names, in particular).
+     *  1. Fuzzy match against whatever open-vocabulary text the first
+     *     listen already produced. Fast, no extra round-trip, works fine
+     *     when the name came through reasonably intact.
+     *  2. Free-form re-listen: if that fails, prompt the user and listen
+     *     again via sttEngine, then fuzzy-match the result. Note: unlike
+     *     the old Vosk-backed version, this can no longer bias the
+     *     recognizer's vocabulary toward just the device's contact names -
+     *     neither Google's RecognizerIntent nor Deepgram's simple API this
+     *     app talks to support per-call custom vocabulary the way Vosk's
+     *     grammar mode did. Names outside common usage (many African names
+     *     included) may need a retry more often than before.
      */
     suspend fun resolveContact(spokenName: String): Contact? {
         if (!contactsPermission.status.isGranted) {
@@ -173,41 +163,17 @@ fun HomeScreen(
         val tone = toneFromSlider(localSettings.getToneLevel())
         speakAndWait(responseGenerator.speechForWhoToCall(tone))
 
-        val contactNames = contacts.map { it.name }
-        if (!voskManager.startListeningWithGrammar(contactNames)) return null
-
-        val reheard = CompletableDeferred<String?>()
-        val timeoutJob = coroutineScope.launch {
-            delay(6000)
-            if (!reheard.isCompleted) reheard.complete(null)
-        }
-
         com.dti.kate.core.MicArbiter.setCapturing(true)
-        audioCapture.start(context, coroutineScope) { chunk ->
-            val finalResult = voskManager.feedAudio(chunk)
-            if (finalResult != null && !reheard.isCompleted) {
-                reheard.complete(finalResult)
-            }
+        val finalText = try {
+            sttEngine.listen(coroutineScope)
+        } finally {
+            com.dti.kate.core.MicArbiter.setCapturing(false)
         }
-
-        val heardDuringCapture = reheard.await()
-        timeoutJob.cancel()
-        audioCapture.stop()
-        com.dti.kate.core.MicArbiter.setCapturing(false)
-        val finalText = heardDuringCapture ?: voskManager.stopListening()
-        voskManager.restoreDefaultRecognizer()
 
         if (finalText.isNullOrBlank()) return null
 
         return contacts.firstOrNull { it.name.equals(finalText, ignoreCase = true) }
             ?: contactsHelper.findBestMatch(finalText, contacts, minSimilarity = 0.4)
-    }
-
-    LaunchedEffect(Unit) {
-        voskManager.initialize { success ->
-            voskReady = success
-            statusMessage = if (success) "Tap for a command, hold to search" else "Speech engine failed to load"
-        }
     }
 
     /**
@@ -310,150 +276,58 @@ fun HomeScreen(
             intent = action::class.simpleName ?: "Unknown",
             confidence = confidence,
             usedCloud = usedCloud,
-            modelVersion = "vosk-0.3.47+deepgram",
+            modelVersion = "google+deepgram",
         )
         maybeSyncVoiceLogs()
         speak(reply)
     }
 
-    fun stopListeningAndProcess() {
-        if (!listenJobActive) return
-        listenJobActive = false
-        audioCapture.stop()
-        com.dti.kate.core.MicArbiter.setCapturing(false)
-        val localText = voskManager.stopListening()
-        voskManager.restoreDefaultRecognizer()
-        val bufferedAudio = recordedAudioBuffer.toByteArray()
-
-        coroutineScope.launch {
-            var usedCloud = false
-            var confidence = 0f
-
-            val finalText = if (NetworkMonitor.isOnline(context) && kateApiClient.isAuthenticated() && bufferedAudio.size >= MIN_CLOUD_AUDIO_BYTES) {
-                statusMessage = "Refining transcription..."
-                // 6s cap: cloud STT should be well under this for a short
-                // command/query, and we always have the local result ready
-                // as a fallback if it isn't.
-                val cloudResult = withTimeoutOrNull(6000) {
-                    kateApiClient.transcribeAudio(bufferedAudio)
-                }
-                DebugLog.log(
-                    context, "CloudSTT",
-                    "local=\"${localText ?: ""}\" cloud=${cloudResult?.let { "\"${it.text}\" (conf=${it.confidence})" } ?: "unavailable"}"
-                )
-                val cloudText = cloudResult?.text?.takeIf { it.isNotBlank() }
-                if (cloudText != null) {
-                    usedCloud = true
-                    confidence = cloudResult.confidence
-                    sttSourceLabel = "☁️ Cloud (Deepgram)"
-                } else {
-                    sttSourceLabel = "📱 On-device (cloud unavailable)"
-                }
-                cloudText ?: localText
-            } else {
-                sttSourceLabel = if (!NetworkMonitor.isOnline(context)) "📱 On-device (offline)" else "📱 On-device"
-                localText
-            }
-            handleQuery(finalText ?: "", usedCloud, confidence)
-        }
-    }
-
     /**
-     * Builds the vocabulary for grammar-constrained command listening:
-     * fixed command/control words plus the device's actual installed app
-     * names and contacts, so "call chidinma" or "open <whatever's really
-     * installed>" can resolve correctly in a single pass, not just the
-     * fixed English trigger words.
-     *
-     * Deliberately excludes open-ended search/question triggers ("search",
-     * "what", "who", "how"...) - those need free-vocabulary dictation
-     * (long-press), since there's no fixed vocabulary to constrain a
-     * search query or typed text to.
+     * Single listen -> process cycle, via the shared sttEngine (same one
+     * KateOverlayService uses). Kate Classic (Google) and Kate Pro
+     * (Deepgram, with its own raw-capture + fallback) both do their own
+     * end-of-speech detection internally now, so there's no manual
+     * duration timer or chunk-feeding loop here anymore - that was
+     * specific to Vosk's incremental feedAudio() model.
      */
-    suspend fun buildCommandGrammar(): List<String> {
-        val staticWords = listOf(
-            "weather", "temperature", "forecast",
-            "play", "music", "song", "spotify", "audiomack",
-            "torch", "flashlight", "flash", "on", "off", "turn",
-            "bluetooth", "wifi", "wi-fi",
-            "volume", "up", "down", "increase", "decrease", "mute", "set",
-            "call", "phone", "dial",
-            "message", "text", "saying",
-            "open", "launch", "start", "run",
-            "help",
-            "zero", "one", "two", "three", "four", "five", "six", "seven",
-            "eight", "nine", "ten", "eleven", "twelve", "thirteen",
-            "fourteen", "fifteen", "twenty", "thirty", "forty", "fifty", "hundred",
-        )
-        val appNames = appLauncher.getInstalledAppNames()
-        val contactNames = if (contactsPermission.status.isGranted) {
-            contactsHelper.getAllContacts().map { it.name }
-        } else {
-            emptyList()
-        }
-        return (staticWords + appNames + contactNames).distinct()
-    }
-
-    /** useCommandGrammar=true (default, tap) constrains recognition to known command vocabulary for accuracy. false (long-press) uses open dictation for search/free text. */
-    suspend fun startListening(useCommandGrammar: Boolean = true) {
+    fun startListening(@Suppress("UNUSED_PARAMETER") useCommandGrammar: Boolean = true) {
         if (!micPermission.status.isGranted) {
             micPermission.launchPermissionRequest()
             return
         }
-        if (!voskReady || listenJobActive) return
+        if (listenJobActive) return
 
-        val started = if (useCommandGrammar) {
-            voskManager.startListeningWithGrammar(buildCommandGrammar())
-        } else {
-            voskManager.startListening()
-        }
-        if (!started) return
-
-        com.dti.kate.core.MicArbiter.setCapturing(true)
         kateState = KateState.LISTENING
         listenJobActive = true
-        recordedAudioBuffer.reset()
-        statusMessage = if (useCommandGrammar) "Listening for a command..." else "Listening..."
-
-        val maxDurationSeconds = localSettings.getTimeoutSeconds().coerceAtLeast(5)
-        var elapsedSeconds = 0
-
-        audioCapture.start(context, coroutineScope) { chunk ->
-            recordedAudioBuffer.write(chunk)
-            val finalResult = voskManager.feedAudio(chunk)
-            if (finalResult != null && listenJobActive) {
-                stopListeningAndProcess()
-            }
-        }
+        statusMessage = "Listening..."
+        com.dti.kate.core.MicArbiter.setCapturing(true)
 
         coroutineScope.launch {
-            while (listenJobActive && elapsedSeconds < maxDurationSeconds) {
-                delay(1000)
-                elapsedSeconds++
+            val mode = localSettings.getSttMode()
+            sttSourceLabel = if (mode == "pro") "☁️ Kate Pro (Deepgram)" else "📱 Kate Classic (Google)"
+
+            val finalText = try {
+                sttEngine.listen(coroutineScope)
+            } finally {
+                com.dti.kate.core.MicArbiter.setCapturing(false)
+                listenJobActive = false
             }
-            if (listenJobActive) {
-                stopListeningAndProcess()
-            }
+
+            kateState = KateState.PROCESSING
+            handleQuery(finalText ?: "", usedCloud = mode == "pro", confidence = 0f)
         }
     }
 
     // Fires when a background wake gesture (Raise/Shake) is detected -
-    // auto-starts listening once Kate is idle and ready.
+    // auto-starts listening once Kate is idle.
     //
-    // Two race conditions handled here, both specific to cold starts
-    // (app wasn't already open when the gesture fired):
-    //  1. KateWakeSignal now replays its last event, so a collector that
-    //     subscribes *after* the emission (e.g. HomeScreen composing after
-    //     KateForegroundService's startActivity() call queues a fresh
-    //     launch) still receives it - previously it was emitted into an
-    //     empty flow and lost.
-    //  2. Even with the replay, voskReady may still be false at the exact
-    //     moment this LaunchedEffect first sees the token (native engine
-    //     init is still running). A plain `.collect { if (voskReady) ... }`
-    //     would see that single delivery, find voskReady false, and drop
-    //     the wake request on the floor. Tracking the token as state and
-    //     re-evaluating whenever voskReady/kateState change means we act
-    //     on it the moment the engine actually becomes ready instead.
+    // KateWakeSignal replays its last event, so a collector that subscribes
+    // *after* the emission (e.g. HomeScreen composing after
+    // KateForegroundService's startActivity() call queues a fresh launch)
+    // still receives it - previously it was emitted into an empty flow and
+    // lost. There's no engine-readiness race to handle anymore (unlike the
+    // old Vosk model load): Google/Deepgram need no warm-up, so the only
+    // gate left is kateState == IDLE.
     var pendingWakeToken by remember { mutableLongStateOf(0L) }
     var lastHandledWakeToken by remember { mutableLongStateOf(0L) }
 
@@ -463,8 +337,8 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(pendingWakeToken, voskReady, kateState) {
-        if (pendingWakeToken != lastHandledWakeToken && voskReady && kateState == KateState.IDLE) {
+    LaunchedEffect(pendingWakeToken, kateState) {
+        if (pendingWakeToken != lastHandledWakeToken && kateState == KateState.IDLE) {
             lastHandledWakeToken = pendingWakeToken
             startListening()
         }
@@ -524,7 +398,7 @@ fun HomeScreen(
             Text(
                 text = when (kateState) {
                     KateState.IDLE -> if (lastReply.isNotEmpty()) lastReply else "How can I help?"
-                    KateState.LISTENING -> if (liveTranscription.isNotEmpty()) liveTranscription else "Listening..."
+                    KateState.LISTENING -> "Listening..."
                     KateState.PROCESSING -> "Thinking..."
                     KateState.SPEAKING -> lastReply
                 },
@@ -568,14 +442,18 @@ fun HomeScreen(
                         detectTapGestures(
                             onTap = {
                                 when (kateState) {
-                                    KateState.IDLE -> coroutineScope.launch { startListening(useCommandGrammar = true) }
-                                    KateState.LISTENING -> stopListeningAndProcess()
+                                    KateState.IDLE -> startListening(useCommandGrammar = true)
+                                    // No manual stop-early anymore: both Kate
+                                    // Classic (Google's own endpointer) and
+                                    // Kate Pro (its own RMS silence detector)
+                                    // auto-stop on a natural speech pause now.
+                                    KateState.LISTENING -> { /* no-op */ }
                                     else -> { /* busy */ }
                                 }
                             },
                             onLongPress = {
                                 if (kateState == KateState.IDLE) {
-                                    coroutineScope.launch { startListening(useCommandGrammar = false) }
+                                    startListening(useCommandGrammar = false)
                                 }
                             },
                         )
