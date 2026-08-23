@@ -51,7 +51,6 @@ class KateOverlayService : Service() {
         private const val COLOR_PROCESSING = 0xFF7C3AED.toInt() // Purple70
         private const val COLOR_SPEAKING = 0xFFFF6B9D.toInt()
 
-        private const val LISTEN_TIMEOUT_MS = 6000L
         private const val AUTO_COLLAPSE_DELAY_MS = 4000L
 
         private const val ACTION_ENSURE_SHOWING = "com.dti.kate.overlay.ENSURE_SHOWING"
@@ -87,7 +86,6 @@ class KateOverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var overlayView: View
-    private lateinit var voskManager: VoskManager
     private lateinit var audioCapture: AudioCapture
     private lateinit var localSettings: LocalSettingsStore
     private lateinit var commandProcessor: KateCommandProcessor
@@ -97,7 +95,6 @@ class KateOverlayService : Service() {
 
     private var isExpanded = false
     private var overlayAdded = false
-    private var voskReady = false
     private var state = OverlayState.IDLE
     private var ringAnimator: ValueAnimator? = null
     private var collapseTimer: CountDownTimer? = null
@@ -112,17 +109,12 @@ class KateOverlayService : Service() {
         localSettings = LocalSettingsStore(this)
         audioCapture = AudioCapture()
 
-        voskManager = VoskManager(this)
-        serviceScope.launch {
-            voskManager.initialize { ready -> voskReady = ready }
-        }
-
         // Repository requires an authenticated user for transcribeCloud's
         // token - null here just means "Kate Pro" quietly behaves like
         // "Kate Classic" (see KateSttEngine's class doc), not an error.
         val repo = com.dti.kate.repository.Repository(applicationContext)
         val repository = if (repo.isAuthenticated()) repo else null
-        sttEngine = KateSttEngine(this, voskManager, audioCapture, localSettings, repository)
+        sttEngine = KateSttEngine(this, audioCapture, localSettings, repository)
 
         ttsEngine = KateTtsEngine(this)
         serviceScope.launch { ttsEngine.initialize() }
@@ -179,18 +171,6 @@ class KateOverlayService : Service() {
         collapseTimer?.cancel()
 
         activeCycle = serviceScope.launch {
-            val mode = localSettings.getSttMode()
-            val needsVosk = mode != "smart" // Kate Smart (Google) doesn't touch Vosk at all - see KateSttEngine
-            if (needsVosk && !voskReady) {
-                // Model still loading (rare - only right after boot/device
-                // restart). Don't leave the user talking to a bubble that
-                // isn't listening.
-                setState(OverlayState.SPEAKING)
-                speakAndAwait("Still starting up - give me a second and try again.")
-                setState(OverlayState.IDLE)
-                return@launch
-            }
-
             setState(OverlayState.LISTENING)
             MicArbiter.setCapturing(true)
 
@@ -225,7 +205,7 @@ class KateOverlayService : Service() {
         }
     }
 
-    private suspend fun listenForTranscript(): String? = sttEngine.listen(serviceScope, LISTEN_TIMEOUT_MS)
+    private suspend fun listenForTranscript(): String? = sttEngine.listen(serviceScope)
 
     private suspend fun speakAndAwait(text: String) = ttsEngine.speakAndAwait(text)
 
