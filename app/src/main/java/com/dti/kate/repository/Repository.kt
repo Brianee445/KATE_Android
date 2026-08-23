@@ -177,8 +177,9 @@ class Repository @Inject constructor(@ApplicationContext private val context: Co
      * transcribe.py's docstring - keys never touch the APK). Used by
      * KateSttEngine's "Kate Pro" mode. Failures return Result.failure
      * rather than throwing past this point - per the endpoint's own
-     * documented contract, this is a best-effort enhancement over local
-     * Vosk, never something the caller should treat as fatal.
+     * documented contract, this is a best-effort enhancement, never
+     * something the caller should treat as fatal (Kate Pro falls back
+     * to Kate Classic on failure - see KateSttEngine).
      */
     suspend fun transcribeCloud(audioBytes: ByteArray, sampleRate: Int = 16000, channels: Int = 1): Result<TranscribeResponse> {
         return withContext(Dispatchers.IO) {
