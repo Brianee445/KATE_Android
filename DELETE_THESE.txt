@@ -1,0 +1,42 @@
+Files/directories to DELETE from the repo (not included in this zip
+since they no longer exist - delete them manually or via git rm):
+
+  app/src/main/java/com/dti/kate/core/VoskManager.kt
+  app/src/main/java/com/dti/kate/core/NativeBridge.kt
+  app/src/main/cpp/                          (entire directory)
+  scripts/download_third_party.sh
+
+Everything else in this zip is a MODIFIED file - overwrite in place
+at the same path.
+
+WHAT CHANGED (summary):
+- Vosk (offline STT) removed entirely - was the source of the freeze/
+  crash on Transsion devices and ~130MB of the APK's 175MB.
+- Dead C++ engine (kate_engine.so) removed entirely too - it was just a
+  JNI wrapper around Vosk itself, not a separate offline capability, so
+  it couldn't have replaced what Vosk was doing.
+- Kate Classic = Google's on-device/cloud recognizer now (previously
+  "Kate Smart"). Kate Pro (Deepgram) unchanged in spirit, but now
+  captures raw audio directly with its own lightweight RMS-based
+  silence detector (previously piggybacked on Vosk's endpointer), and
+  falls back to Kate Classic on failure/timeout.
+- No offline STT fallback exists anymore - both modes require
+  connectivity. Flag if that's a problem for target users with patchy
+  data.
+- HomeScreen's mic icon now goes through the same KateSttEngine as the
+  overlay (previously had its own separate Vosk-based capture loop) -
+  this also resolves the old "extend 3-tier STT to HomeScreen" pending
+  item as a side effect.
+- Manual "tap to stop listening early" removed - neither Google's
+  recognizer nor the new Pro capture path expose a safe way to cancel
+  mid-listen without hanging or leaking the mic, and both auto-stop on
+  a natural speech pause now anyway.
+- Contact-name resolution's grammar-constrained re-listen is gone
+  (Google/Deepgram's simple APIs don't support per-call vocabulary
+  biasing the way Vosk did) - now a plain free-form re-listen + fuzzy
+  match. Real accuracy regression for uncommon names - flagging clearly,
+  not hiding it.
+- CI: removed "Set up Android NDK" step from all three workflows (no
+  native code left to build), removed all Vosk model download steps.
+  android-ci.yml's debug build no longer needs any model-download step
+  at all now - that was a previously-flagged unsolved gap, now moot.
