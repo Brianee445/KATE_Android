@@ -1,9 +1,5 @@
 // app/build.gradle.kts
 
-import java.io.FileOutputStream
-import java.net.URL
-import java.util.zip.ZipFile
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -26,18 +22,6 @@ android {
         multiDexEnabled = true
         buildConfigField("String", "BACKEND_URL", "\"https://kate-backend-8aes.onrender.com/\"")
 
-        externalNativeBuild {
-            cmake {
-                cppFlags("-std=c++17 -O2 -fno-rtti -fno-exceptions -Wl,-z,max-page-size=16384")
-                arguments(
-                    "-DANDROID_PLATFORM=android-24",
-                    "-DANDROID_ARM_NEON=TRUE",
-                    "-DANDROID_STL=c++_shared"
-                )
-                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-            }
-        }
-
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -52,13 +36,6 @@ android {
     splits {
         abi {
             isEnable = false
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
         }
     }
 
@@ -112,7 +89,6 @@ android {
         }
         jniLibs {
             useLegacyPackaging = false
-            pickFirsts += "**/libjnidispatch.so"
             pickFirsts += "**/libtensorflowlite_c.so"
             pickFirsts += "**/libc++_shared.so"
         }
@@ -153,16 +129,6 @@ android {
     sourceSets {
         getByName("main") {
             assets.srcDirs("src/main/assets")
-            jniLibs.srcDirs(
-                "src/main/cpp/third_party/tflite/lib",
-                // kate_engine.so dynamically links against libvosk.so (passed
-                // straight to the linker in CMakeLists.txt, not statically
-                // embedded) - without packaging it here too, the APK ships
-                // kate_engine.so with an unresolved DT_NEEDED dependency and
-                // System.loadLibrary("kate_engine") fails at runtime even
-                // though the build compiles and links cleanly.
-                "src/main/cpp/third_party/vosk/lib"
-            )
         }
     }
 
@@ -216,22 +182,15 @@ dependencies {
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.storage)
 
-    // vosk-android 0.3.47 pinned deliberately: this is the last release
-    // before a ~2.5 year gap in upstream releases (0.3.47 -> dormant ->
-    // 0.3.70/0.3.75). We tried 0.3.75 and 0.3.70 earlier and both crashed
-    // with UnsatisfiedLinkError (vosk_recognizer_set_endpointer_delays
-    // undefined symbol) - the Java bindings and bundled native .so were
-    // out of sync in those releases. 0.3.47 is confirmed working in a
-    // sibling Kate project with no such crash. The @aar classifier ensures
-    // Gradle resolves JNA's Android artifact (with per-ABI native libs),
-    // not a desktop-only variant.
-    implementation("net.java.dev.jna:jna:5.18.1@aar")
-    implementation(libs.vosk.android)
+    // net.java.dev.jna and vosk-android dependencies removed with Vosk -
+    // see KateSttEngine's class doc for why (offline STT froze on
+    // low-RAM/Transsion hardware, and the ~130MB bundled model was most
+    // of the APK's 175MB). No offline STT fallback exists anymore.
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
 
     // Piper TTS dependency intentionally removed - piper-plus-g2p-android
-    // requires Kotlin 2.1.0+, and with Piper on hold (Vosk/Google/Deepgram
+    // requires Kotlin 2.1.0+, and with Piper on hold (Google/Deepgram
     // covers STT+TTS needs for now - see KateSttEngine and KateTtsEngine's
     // platform-TTS fallback), keeping Kotlin at 2.0.21 and dropping this
     // dependency avoids that whole compatibility problem rather than
@@ -262,73 +221,4 @@ kapt {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
-}
-
-tasks.register<DownloadVoskModelTask>("downloadVoskModel") {
-    // vosk-model-en-us-daanzu-20200905-lgraph (129M): swapped from
-    // en-us-0.22-lgraph. On formal benchmarks (Librispeech/TEDLIUM)
-    // daanzu-lgraph scores marginally *worse* (WER 8.20 vs 7.82) - but
-    // those benchmarks are clean American/British audiobook speech, not
-    // accent-diverse, so they don't actually measure what matters for
-    // this app's audience. daanzu is directly verified (sibling Kate
-    // project, extensive real-world use) to handle African-accented
-    // English well; 0.22-lgraph was never validated against that. Same
-    // lgraph family, so dynamic vocabulary (grammar-constrained
-    // recognition for commands/contacts) stays fully compatible.
-    modelUrl = "https://alphacephei.com/vosk/models/vosk-model-en-us-daanzu-20200905-lgraph.zip"
-    modelDir = file("src/main/assets/vosk-model")
-}
-
-tasks.named("preBuild") {
-    dependsOn("downloadVoskModel")
-}
-
-abstract class DownloadVoskModelTask : DefaultTask() {
-    @get:Input
-    abstract val modelUrl: Property<String>
-
-    @get:OutputDirectory
-    abstract val modelDir: DirectoryProperty
-
-    @TaskAction
-    fun downloadAndExtract() {
-        val destDir = modelDir.get().asFile
-        if (destDir.exists() && destDir.listFiles()?.isNotEmpty() == true) {
-            println("✅ Vosk model already exists, skipping download")
-            return
-        }
-
-        println("📥 Downloading Vosk model from ${modelUrl.get()}")
-
-        val zipFile = File(destDir.parentFile, "vosk-model.zip")
-        URL(modelUrl.get()).openStream().use { input ->
-            FileOutputStream(zipFile).use { output ->
-                input.copyTo(output)
-            }
-        }
-
-        println("📦 Extracting Vosk model...")
-        ZipFile(zipFile).use { zip ->
-            zip.entries().asSequence().forEach { entry ->
-                if (!entry.isDirectory) {
-                    val targetFile = File(destDir, entry.name)
-                    targetFile.parentFile?.mkdirs()
-                    zip.getInputStream(entry).use { input ->
-                        FileOutputStream(targetFile).use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                }
-            }
-        }
-
-        zipFile.delete()
-
-        val modelFile = File(destDir, "am/final.mdl")
-        if (modelFile.exists()) {
-            println("✅ Vosk model downloaded successfully (${modelFile.length() / 1024 / 1024} MB)")
-        } else {
-            throw GradleException("❌ Vosk model download failed - model file not found")
-        }
-    }
 }

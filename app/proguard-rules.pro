@@ -40,25 +40,6 @@
 
 
 # ============================================================================
-# 2. VOSK (Speech-to-Text)
-# ============================================================================
-# Vosk uses JNI and reflection for model loading
-
--keep class org.vosk.** { *; }
--keepclassmembers class org.vosk.** {
-    *;
-}
--dontwarn org.vosk.**
-
-# Keep Vosk model classes
--keep class com.alphacephei.vosk.** { *; }
--keepclassmembers class com.alphacephei.vosk.** {
-    *;
-}
--dontwarn com.alphacephei.vosk.**
-
-
-# ============================================================================
 # 3. TENSORFLOW LITE
 # ============================================================================
 # TFLite uses reflection for delegate loading
@@ -463,18 +444,4 @@
 
 # Suppress Compose warnings
 -dontwarn androidx.compose.ui.**
-# JNA / Vosk — keep native-interop classes and fields intact.
-# JNA's Pointer/Structure/Memory classes have fields (like "peer")
-# that are only accessed via native JNI reflection, never from Java
-# bytecode directly — R8 strips them as "unused" without these rules,
-# causing UnsatisfiedLinkError: Can't obtain peer field ID at runtime.
--keep class com.sun.jna.** { *; }
--keepclassmembers class * extends com.sun.jna.** {
-    public *;
-}
--dontwarn com.sun.jna.**
-
-# Vosk itself also uses JNA-backed native classes internally
--keep class org.vosk.** { *; }
--dontwarn org.vosk.**
 
