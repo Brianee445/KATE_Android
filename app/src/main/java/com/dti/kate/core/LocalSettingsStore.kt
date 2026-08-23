@@ -50,10 +50,11 @@ class LocalSettingsStore(context: Context) {
     fun getWakeWordEnabled(): Boolean = prefs.getBoolean(KEY_WAKE_WORD_ENABLED, true)
     fun setWakeWordEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_WAKE_WORD_ENABLED, value).apply()
 
-    // "classic" (Vosk/local), "smart" (Google), "pro" (Deepgram cloud) -
+    // "classic" (Google) or "pro" (Deepgram cloud, falls back to classic) -
     // see KateSttEngine. Stored as the internal id, not the display name,
     // so renaming "Kate Pro" etc. in the UI later doesn't touch stored
-    // prefs.
+    // prefs. A stale "smart" value from before Vosk was dropped falls
+    // through KateSttEngine's `when` to classic - no migration needed.
     fun getSttMode(): String = prefs.getString(KEY_STT_MODE, "classic") ?: "classic"
     fun setSttMode(value: String) = prefs.edit().putString(KEY_STT_MODE, value).apply()
 

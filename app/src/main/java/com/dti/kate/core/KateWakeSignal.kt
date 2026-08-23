@@ -15,8 +15,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Why: KateForegroundService calls startActivity(...) then trigger() back
  * to back. startActivity() only *queues* the launch - KateActivity/
  * HomeScreen aren't created and collecting yet by the time trigger() runs,
- * especially on a cold start (process launch + Compose + Vosk init all
- * take real time). With no replay, that emission fired into an empty
+ * especially on a cold start (process launch + Compose init all take real time). With no replay, that emission fired into an empty
  * SharedFlow and was gone by the time HomeScreen subscribed a moment
  * later - the app would open, but the mic never started. replay = 1 means
  * a subscriber that shows up after the emission still receives it.

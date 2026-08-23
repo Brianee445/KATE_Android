@@ -13,18 +13,15 @@ data class Contact(val name: String, val phoneNumber: String)
 /**
  * Reads device contacts and resolves a spoken name against them.
  *
- * Two resolution strategies are used together (see VoskManager's grammar
- * support and HomeScreen's call/message handling):
- *  1. Grammar-constrained recognition (preferred) - Vosk is told the exact
- *     set of contact names up front for that utterance, so the decoder's
- *     own acoustic search is steered toward the closest real name using
- *     its full acoustic model, not just string similarity after the fact.
- *  2. Fuzzy matching (this class, [findBestMatch]) - a fallback for when
- *     open-vocabulary recognition already produced some text and grammar
- *     re-listening isn't available or didn't help. Works directly on
- *     whatever text came out, which may itself be a garbled guess at a
- *     name Vosk's acoustic model has never seen - so this is a genuine
- *     fallback, not the primary defense, especially for non-English names.
+ * Fuzzy string matching ([findBestMatch]) is now the only resolution
+ * strategy - see HomeScreen.resolveContact(). Previously, a
+ * grammar-constrained re-listen (Vosk told the exact set of contact names
+ * up front, steering its own acoustic search toward the closest real name)
+ * ran first as a stronger primary defense. That's gone along with Vosk:
+ * neither Google's RecognizerIntent nor Deepgram's simple API this app
+ * talks to support per-call custom vocabulary the same way, so this class
+ * is doing more work than before - names outside common usage (many
+ * African names included) may need a retry more often as a result.
  */
 class ContactsHelper(private val context: Context) {
 

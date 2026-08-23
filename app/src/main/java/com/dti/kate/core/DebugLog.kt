@@ -13,7 +13,7 @@ import kotlin.concurrent.withLock
 
 /**
  * A small, persistent, file-backed log for the speech pipeline
- * (VoskManager / native engine), independent of Logcat.
+ * (GoogleSttEngine / KateSttEngine), independent of Logcat.
  *
  * Why this exists: on this device, the OS logcat main buffer gets flooded
  * by OEM noise (window-manager "Layer: Hide layer..." spam, Hiber/proxy

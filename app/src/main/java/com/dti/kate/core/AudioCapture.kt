@@ -20,17 +20,18 @@ import kotlin.math.sqrt
 class AudioCapture {
 
     companion object {
-        const val SAMPLE_RATE = 16000 // matches VoskManager's Recognizer sample rate
+        const val SAMPLE_RATE = 16000 // required by Google's SpeechRecognizer / Deepgram's expected PCM format
 
-        // Target RMS for the software AGC fallback. Vosk's acoustic model was
-        // trained on speech around this level; too quiet starves the model of
-        // signal, too loud clips it. ~28% of full scale (32767) is a safe,
-        // non-clipping target for normal speaking voice.
+        // Target RMS for the software AGC fallback. Speech recognizers
+        // generally expect input around this level; too quiet starves the
+        // model of signal, too loud clips it. ~28% of full scale (32767) is
+        // a safe, non-clipping target for normal speaking voice.
         private const val TARGET_RMS = 3500.0
 
         // Only apply gain when there's plausibly real speech, not silence/
         // room noise floor - otherwise silence gets amplified into a wall of
-        // hiss that Vosk can mis-transcribe as speech.
+        // hiss that a recognizer (or KateSttEngine's own RMS-based silence
+        // detector, for Kate Pro) can mis-read as speech.
         private const val NOISE_FLOOR_RMS = 40.0
 
         // Cap how hard we'll boost a single chunk, so a very quiet pop/click
