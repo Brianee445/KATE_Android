@@ -20,10 +20,8 @@ import kotlinx.coroutines.withContext
  *
  * Caveat inherent to the platform, not this code: still requires Google's
  * speech recognition service to actually be present/enabled on the device
- * (most phones have it, not guaranteed on every OEM skin), and on-device
- * recognition support varies by device - on hardware without it, this
- * silently falls through to needing network. No API key either way - this
- * is free, unlike "Kate Pro" (Deepgram).
+ * (most phones have it, not guaranteed on every OEM skin). No API key
+ * either way - this is free, unlike "Kate Pro" (Deepgram).
  *
  * Must be constructed and used from the main thread - SpeechRecognizer is
  * not thread-safe and its callbacks land on whatever thread it was
@@ -72,11 +70,15 @@ class GoogleSttEngine(private val context: Context) {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            // Prefer on-device recognition where the device supports it -
-            // faster and doesn't need network. Silently ignored on devices
-            // that don't support it; falls through to network-based
-            // recognition instead, still without any UI popup.
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            // EXTRA_PREFER_OFFLINE deliberately NOT set. Confirmed via
+            // real-device testing (Transsion hardware) that it does not
+            // gracefully fall through to network recognition when the
+            // on-device language pack isn't installed, as assumed/
+            // documented - it hard-fails with ERROR_LANGUAGE_UNAVAILABLE
+            // (code 13) instead, breaking Kate Classic entirely on
+            // exactly the low-end devices this app targets, where that
+            // pack is rarely pre-downloaded. Network-based recognition
+            // still shows no UI popup either way (class-based API).
         }
         sr.startListening(intent)
 
@@ -94,15 +96,21 @@ class GoogleSttEngine(private val context: Context) {
 
     /** Human-readable name for SpeechRecognizer's ERROR_* int constants, for logging only. */
     private fun errorName(error: Int): String = when (error) {
-        SpeechRecognizer.ERROR_AUDIO -> "ERROR_AUDIO"
-        SpeechRecognizer.ERROR_CLIENT -> "ERROR_CLIENT"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ERROR_INSUFFICIENT_PERMISSIONS"
-        SpeechRecognizer.ERROR_NETWORK -> "ERROR_NETWORK"
         SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
+        SpeechRecognizer.ERROR_NETWORK -> "ERROR_NETWORK"
+        SpeechRecognizer.ERROR_AUDIO -> "ERROR_AUDIO"
+        SpeechRecognizer.ERROR_SERVER -> "ERROR_SERVER"
+        SpeechRecognizer.ERROR_CLIENT -> "ERROR_CLIENT"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT"
         SpeechRecognizer.ERROR_NO_MATCH -> "ERROR_NO_MATCH"
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "ERROR_RECOGNIZER_BUSY"
-        SpeechRecognizer.ERROR_SERVER -> "ERROR_SERVER"
-        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ERROR_INSUFFICIENT_PERMISSIONS"
+        10 -> "ERROR_TOO_MANY_REQUESTS"
+        11 -> "ERROR_SERVER_DISCONNECTED"
+        12 -> "ERROR_LANGUAGE_NOT_SUPPORTED"
+        13 -> "ERROR_LANGUAGE_UNAVAILABLE"
+        14 -> "ERROR_CANNOT_CHECK_SUPPORT_FOR_LANGUAGE"
+        15 -> "ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS"
         else -> "UNKNOWN_ERROR"
     }
 }
