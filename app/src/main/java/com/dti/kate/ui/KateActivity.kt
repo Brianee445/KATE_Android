@@ -13,7 +13,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.dti.kate.core.VoskManager
 import com.dti.kate.repository.Repository
 import com.dti.kate.service.KateForegroundService
 import com.dti.kate.ui.admin.AdminDashboardScreen
@@ -36,7 +35,6 @@ class KateActivity : ComponentActivity() {
 @androidx.compose.runtime.Composable
 fun KateNavHost(navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
-    val voskManager = remember { VoskManager(context) }
     val repository = remember { Repository(context.applicationContext) }
 
     val isAuthenticated = repository.isAuthenticated()
@@ -78,7 +76,7 @@ fun KateNavHost(navController: NavHostController = rememberNavController()) {
         composable("login") { LoginScreen(navController) }
         composable("register") { RegisterScreen(navController) }
         composable("forgot_password") { ForgotPasswordScreen(navController) }
-        composable("home") { HomeScreen(navController, voskManager = voskManager) }
+        composable("home") { HomeScreen(navController) }
         composable("chat") { ChatScreen(navController) }
         composable("history") { HistoryScreen(navController) }
         composable("settings") { SettingsScreen(navController) }
