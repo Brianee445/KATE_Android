@@ -57,6 +57,7 @@ class GoogleSttEngine(private val context: Context) {
                 if (!result.isCompleted) result.complete(matches?.firstOrNull())
             }
             override fun onError(error: Int) {
+                DebugLog.log(context, "GoogleSttEngine", "onError: ${errorName(error)} (code $error)")
                 if (!result.isCompleted) result.complete(null)
             }
             override fun onReadyForSpeech(params: Bundle?) {}
@@ -89,5 +90,19 @@ class GoogleSttEngine(private val context: Context) {
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
+    }
+
+    /** Human-readable name for SpeechRecognizer's ERROR_* int constants, for logging only. */
+    private fun errorName(error: Int): String = when (error) {
+        SpeechRecognizer.ERROR_AUDIO -> "ERROR_AUDIO"
+        SpeechRecognizer.ERROR_CLIENT -> "ERROR_CLIENT"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ERROR_INSUFFICIENT_PERMISSIONS"
+        SpeechRecognizer.ERROR_NETWORK -> "ERROR_NETWORK"
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
+        SpeechRecognizer.ERROR_NO_MATCH -> "ERROR_NO_MATCH"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "ERROR_RECOGNIZER_BUSY"
+        SpeechRecognizer.ERROR_SERVER -> "ERROR_SERVER"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT"
+        else -> "UNKNOWN_ERROR"
     }
 }
