@@ -213,36 +213,48 @@ class KateOverlayService : Service() {
     // Visual state - ring pulse + avatar tint, no text
     // ------------------------------------------------------------------
 
+    /**
+     * Safe to call from any thread. startListenCycle runs on
+     * serviceScope (Dispatchers.IO), and this touches views + starts a
+     * ValueAnimator - both require the main/Looper thread. Confirmed via
+     * crash report: calling this directly from the IO coroutine threw
+     * "Animators may only be run on Looper threads" (ValueAnimator needs
+     * a Looper) every time the overlay's listen cycle ran. Posting the
+     * UI work to the main looper here means every call site stays as-is
+     * - no need to wrap 6+ call sites in withContext(Dispatchers.Main)
+     * individually, and any future call site is safe by default too.
+     */
     private fun setState(newState: OverlayState) {
         state = newState
-        val color = when (newState) {
-            OverlayState.IDLE -> COLOR_IDLE
-            OverlayState.LISTENING -> COLOR_LISTENING
-            OverlayState.PROCESSING -> COLOR_PROCESSING
-            OverlayState.SPEAKING -> COLOR_SPEAKING
-        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val color = when (newState) {
+                OverlayState.IDLE -> COLOR_IDLE
+                OverlayState.LISTENING -> COLOR_LISTENING
+                OverlayState.PROCESSING -> COLOR_PROCESSING
+                OverlayState.SPEAKING -> COLOR_SPEAKING
+            }
 
-        val avatar = overlayView.findViewById<ImageView>(R.id.kate_avatar)
-        avatar.setColorFilter(color, PorterDuff.Mode.SRC_ATOP)
+            val avatar = overlayView.findViewById<ImageView>(R.id.kate_avatar)
+            avatar.setColorFilter(color, PorterDuff.Mode.SRC_ATOP)
 
-        val ring = overlayView.findViewById<View>(R.id.state_ring)
-        (ring.background as? GradientDrawable)?.setStroke(dp(3), color)
+            val ring = overlayView.findViewById<View>(R.id.state_ring)
+            (ring.background as? GradientDrawable)?.setStroke(dp(3), color)
 
-        ringAnimator?.cancel()
-        if (newState == OverlayState.IDLE) {
-            ring.alpha = 0f
-            ring.scaleX = 1f
-            ring.scaleY = 1f
-        } else {
-            ring.alpha = 1f
-            // Slow pulse (breathing ring) - faster while actively listening
-            // than while thinking/speaking, so the state is legible at a
-            // glance without needing to read anything.
-            val duration = if (newState == OverlayState.LISTENING) 700L else 1100L
-            ringAnimator = ValueAnimator.ofFloat(1f, 1.25f).apply {
-                this.duration = duration
-                repeatMode = ValueAnimator.REVERSE
-                repeatCount = ValueAnimator.INFINITE
+            ringAnimator?.cancel()
+            if (newState == OverlayState.IDLE) {
+                ring.alpha = 0f
+                ring.scaleX = 1f
+                ring.scaleY = 1f
+            } else {
+                ring.alpha = 1f
+                // Slow pulse (breathing ring) - faster while actively listening
+                // than while thinking/speaking, so the state is legible at a
+                // glance without needing to read anything.
+                val duration = if (newState == OverlayState.LISTENING) 700L else 1100L
+                ringAnimator = ValueAnimator.ofFloat(1f, 1.25f).apply {
+                    this.duration = duration
+                    repeatMode = ValueAnimator.REVERSE
+                    repeatCount = ValueAnimator.INFINITE
                 addUpdateListener {
                     val scale = it.animatedValue as Float
                     ring.scaleX = scale
@@ -250,6 +262,7 @@ class KateOverlayService : Service() {
                     ring.alpha = 1f - (scale - 1f) // fades slightly as it expands
                 }
                 start()
+                }
             }
         }
     }
