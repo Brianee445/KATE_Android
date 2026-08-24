@@ -273,7 +273,7 @@ class KateOverlayService : Service() {
                     }
                 }
             } catch (e: Exception) {
-                DebugLog.log(this@KateOverLayService, "KateOverLayService", "setState UI update failed (state=$newState): ${e.javaClass.simpleName}: ${e.message}")
+                DebugLog.log(this@KateOverlayService, "KateOverLayService", "setState UI update failed (state=$newState): ${e.javaClass.simpleName}: ${e.message}")
             }
         }
     }
