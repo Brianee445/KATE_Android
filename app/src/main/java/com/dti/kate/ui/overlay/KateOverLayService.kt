@@ -227,42 +227,53 @@ class KateOverlayService : Service() {
     private fun setState(newState: OverlayState) {
         state = newState
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            val color = when (newState) {
-                OverlayState.IDLE -> COLOR_IDLE
-                OverlayState.LISTENING -> COLOR_LISTENING
-                OverlayState.PROCESSING -> COLOR_PROCESSING
-                OverlayState.SPEAKING -> COLOR_SPEAKING
-            }
-
-            val avatar = overlayView.findViewById<ImageView>(R.id.kate_avatar)
-            avatar.setColorFilter(color, PorterDuff.Mode.SRC_ATOP)
-
-            val ring = overlayView.findViewById<View>(R.id.state_ring)
-            (ring.background as? GradientDrawable)?.setStroke(dp(3), color)
-
-            ringAnimator?.cancel()
-            if (newState == OverlayState.IDLE) {
-                ring.alpha = 0f
-                ring.scaleX = 1f
-                ring.scaleY = 1f
-            } else {
-                ring.alpha = 1f
-                // Slow pulse (breathing ring) - faster while actively listening
-                // than while thinking/speaking, so the state is legible at a
-                // glance without needing to read anything.
-                val duration = if (newState == OverlayState.LISTENING) 700L else 1100L
-                ringAnimator = ValueAnimator.ofFloat(1f, 1.25f).apply {
-                    this.duration = duration
-                    repeatMode = ValueAnimator.REVERSE
-                    repeatCount = ValueAnimator.INFINITE
-                addUpdateListener {
-                    val scale = it.animatedValue as Float
-                    ring.scaleX = scale
-                    ring.scaleY = scale
-                    ring.alpha = 1f - (scale - 1f) // fades slightly as it expands
+            // Defensive: this runs async relative to when setState() was
+            // called, so if the overlay window/view is torn down (service
+            // stopping, view detached) in the gap between posting and
+            // running, overlayView.findViewById or the animator can throw.
+            // An uncaught exception here would crash the whole main thread
+            // exactly like the original Looper bug did - a UI ring-pulse
+            // update should never be able to take the whole process down.
+            try {
+                val color = when (newState) {
+                    OverlayState.IDLE -> COLOR_IDLE
+                    OverlayState.LISTENING -> COLOR_LISTENING
+                    OverlayState.PROCESSING -> COLOR_PROCESSING
+                    OverlayState.SPEAKING -> COLOR_SPEAKING
                 }
-                start()
+
+                val avatar = overlayView.findViewById<ImageView>(R.id.kate_avatar)
+                avatar.setColorFilter(color, PorterDuff.Mode.SRC_ATOP)
+
+                val ring = overlayView.findViewById<View>(R.id.state_ring)
+                (ring.background as? GradientDrawable)?.setStroke(dp(3), color)
+
+                ringAnimator?.cancel()
+                if (newState == OverlayState.IDLE) {
+                    ring.alpha = 0f
+                    ring.scaleX = 1f
+                    ring.scaleY = 1f
+                } else {
+                    ring.alpha = 1f
+                    // Slow pulse (breathing ring) - faster while actively listening
+                    // than while thinking/speaking, so the state is legible at a
+                    // glance without needing to read anything.
+                    val duration = if (newState == OverlayState.LISTENING) 700L else 1100L
+                    ringAnimator = ValueAnimator.ofFloat(1f, 1.25f).apply {
+                        this.duration = duration
+                        repeatMode = ValueAnimator.REVERSE
+                        repeatCount = ValueAnimator.INFINITE
+                        addUpdateListener {
+                            val scale = it.animatedValue as Float
+                            ring.scaleX = scale
+                            ring.scaleY = scale
+                            ring.alpha = 1f - (scale - 1f) // fades slightly as it expands
+                        }
+                        start()
+                    }
                 }
+            } catch (e: Exception) {
+                DebugLog.log(this@KateOverLayService, "KateOverLayService", "setState UI update failed (state=$newState): ${e.javaClass.simpleName}: ${e.message}")
             }
         }
     }
