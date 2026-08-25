@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Purely a clip outline, not a visible background - fill is transparent.
+  Paired with android:clipToOutline="true" on an ImageView, this crops
+  whatever image is set (regardless of the source file's own shape/
+  background) to a circle. Used to fix the overlay's avatar rendering as
+  a raw square: the bubble/card container beneath it was already
+  properly circular (see overlay_bubble_background.xml), but the
+  ImageView on top of it had no clip of its own, so a square source
+  image just covered the circular container underneath.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@android:color/transparent" />
+</shape>
