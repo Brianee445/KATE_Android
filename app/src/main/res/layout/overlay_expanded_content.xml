@@ -16,6 +16,9 @@
             android:id="@+id/overlay_avatar"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:background="@drawable/circle_clip_mask"
+            android:clipToOutline="true"
+            android:scaleType="centerCrop"
             android:src="@drawable/kate_avatar_idle" />
 
         <TextView

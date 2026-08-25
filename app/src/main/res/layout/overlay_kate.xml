@@ -27,6 +27,9 @@
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_gravity="center"
+            android:background="@drawable/circle_clip_mask"
+            android:clipToOutline="true"
+            android:scaleType="centerCrop"
             android:src="@drawable/kate_avatar_idle" />
 
         <View
