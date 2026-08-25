@@ -278,14 +278,32 @@ class KateOverlayService : Service() {
         }
     }
 
+    /**
+     * Safe to call from any thread, same reasoning as setState(): both
+     * call sites (185, 204) run inside startListenCycle's serviceScope
+     * coroutine (Dispatchers.IO). CountDownTimer's constructor creates a
+     * Handler() internally, which requires a Looper on the constructing
+     * thread - confirmed via bugreport: "Can't create handler inside
+     * thread DefaultDispatcher-worker-1 that has not called
+     * Looper.prepare()", 8 occurrences. This is a second, separate
+     * Looper-requiring API from the ValueAnimator one in setState() - same
+     * underlying mistake (IO-dispatcher coroutine touching an
+     * Android UI/timer API), different call site, so it needed its own fix.
+     */
     private fun scheduleAutoCollapse() {
-        collapseTimer?.cancel()
-        collapseTimer = object : CountDownTimer(AUTO_COLLAPSE_DELAY_MS, AUTO_COLLAPSE_DELAY_MS) {
-            override fun onTick(millisUntilFinished: Long) {}
-            override fun onFinish() {
-                if (isExpanded) toggleExpanded()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                collapseTimer?.cancel()
+                collapseTimer = object : CountDownTimer(AUTO_COLLAPSE_DELAY_MS, AUTO_COLLAPSE_DELAY_MS) {
+                    override fun onTick(millisUntilFinished: Long) {}
+                    override fun onFinish() {
+                        if (isExpanded) toggleExpanded()
+                    }
+                }.start()
+            } catch (e: Exception) {
+                DebugLog.log(this@KateOverlayService, "KateOverLayService", "scheduleAutoCollapse failed: ${e.javaClass.simpleName}: ${e.message}")
             }
-        }.start()
+        }
     }
 
     /** Text only appears here, and only for an explicit typing command - see setState's call site. Reuses the existing expanded-view transcript TextView rather than adding new UI. */
