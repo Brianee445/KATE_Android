@@ -200,11 +200,15 @@ def generate_avatar_state(source_img, state, config, output_dir):
         return False
 
 def make_square_icon(source_img, size, bg_color=(124, 58, 237, 255)):
-    """Compose the launcher PNG: purple background + inset, centered avatar.
-    Mirrors the adaptive-icon layout (avatar at ~64% of canvas) so the
-    legacy PNG fallback matches what the adaptive icon looks like."""
+    """Compose the launcher PNG: purple background + centered avatar.
+
+    kate_avatar_source.png is a self-contained circular badge - the glow
+    ring around the face is part of the brand mark and already sits close
+    to the image's own edge. Use a small margin (~92% fill) rather than
+    a deep inset, so the ring isn't re-cropped on top of the launcher's
+    own mask clipping. Mirrors the adaptive-icon foreground's ~4% inset."""
     canvas = Image.new('RGBA', (size, size), bg_color)
-    logo_size = int(size * 0.64)
+    logo_size = int(size * 0.92)
     logo = source_img.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
     offset = ((size - logo_size) // 2, (size - logo_size) // 2)
     canvas.paste(logo, offset, logo)
@@ -263,18 +267,23 @@ def generate_adaptive_icon(output_dir):
     with open(adaptive_dir / "ic_launcher_round.xml", "w") as f:
         f.write(adaptive_icon_xml)
 
-    # Foreground: the actual avatar bitmap, inset so it isn't clipped by
-    # circular/squircle/rounded-square launcher masks (Android's spec
-    # wants only the center ~66dp of the 108dp canvas holding real content).
+    # Foreground: the actual avatar bitmap. kate_avatar_source.png is a
+    # self-contained circular badge - the glow ring is part of the brand
+    # mark and already sits close to the image's own edge, with no extra
+    # margin baked in. A deep inset here would re-crop that ring on top
+    # of whatever safe-zone clipping the launcher's mask already applies,
+    # cutting into the trademark. Keep this inset minimal - just enough
+    # to avoid the very corners being clipped by aggressive launcher
+    # masks - and let the ring's own design carry the visual framing.
     drawable_dir = Path(output_dir) / "drawable"
     drawable_dir.mkdir(parents=True, exist_ok=True)
 
     foreground_xml = '''<?xml version="1.0" encoding="utf-8"?>
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:insetLeft="18%"
-    android:insetTop="18%"
-    android:insetRight="18%"
-    android:insetBottom="18%">
+    android:insetLeft="4%"
+    android:insetTop="4%"
+    android:insetRight="4%"
+    android:insetBottom="4%">
     <bitmap
         android:src="@drawable/kate_avatar_source"
         android:gravity="center" />
