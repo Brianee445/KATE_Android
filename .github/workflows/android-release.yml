@@ -21,7 +21,7 @@ jobs:
       # ==================== GENERATE AVATARS ====================
       - name: Generate Kate Avatars
         run: |
-          if [ -f "scripts/generate_kate_avatars.py" ] && [ -f "app/src/main/res/source/kate_avatar_source.png" ]; then
+          if [ -f "scripts/generate_kate_avatars.py" ] && [ -f "app/src/main/res/drawable/kate_avatar_source.png" ]; then
             echo "🎨 Generating Kate avatars..."
             pip install pillow
             python scripts/generate_kate_avatars.py
