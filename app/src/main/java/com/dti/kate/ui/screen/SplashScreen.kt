@@ -74,11 +74,9 @@ fun SplashScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // Replace with your actual splash logo drawable
-                Image(
-                    painter = painterResource(R.drawable.kate_avatar_idle),
-                    contentDescription = "Kate Assistant",
+                com.dti.kate.ui.components.KateAvatar(
+                    size = 180.dp,
                     modifier = Modifier
-                        .size(180.dp)
                         .scale(logoScale)
                         .alpha(logoAlpha),
                 )
