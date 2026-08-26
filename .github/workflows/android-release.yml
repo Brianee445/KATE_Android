@@ -70,6 +70,31 @@ jobs:
             unzip -l "$apk" | grep "\.so" || echo "No .so files found in $apk"
           done
 
+      # ==================== DIAGNOSTIC: LAUNCHER ICON ====================
+      # Temporary - remove once the launcher icon issue is confirmed fixed.
+      # Answers definitively what aapt/badging thinks android:icon resolves
+      # to and whether the adaptive-icon resource chain actually compiled
+      # in, rather than guessing from source files alone.
+      - name: Diagnose launcher icon resolution
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          AAPT2=$(find "$ANDROID_HOME" -name "aapt2" -type f 2>/dev/null | sort -V | tail -n1)
+          if [ -z "$AAPT2" ]; then
+            echo "❌ aapt2 not found under \$ANDROID_HOME ($ANDROID_HOME) - can't run this diagnostic"
+            find "$ANDROID_HOME" -iname "aapt2" 2>/dev/null
+          else
+            echo "Using aapt2 at: $AAPT2"
+            echo ""
+            echo "=== badging (icon path as resolved by the manifest) ==="
+            "$AAPT2" dump badging "$APK" | grep -i "application-icon\|launchable-activity" || echo "no icon lines found in badging output"
+            echo ""
+            echo "=== manifest xmltree: application/activity icon attributes ==="
+            "$AAPT2" dump xmltree "$APK" --file AndroidManifest.xml | grep -B2 -A2 -i "icon"
+            echo ""
+            echo "=== resources: ic_launcher entries ==="
+            "$AAPT2" dump resources "$APK" | grep -A3 -i "ic_launcher\b\|ic_launcher_round\|ic_launcher_foreground\|ic_launcher_background"
+          fi
+
       # ==================== UPLOAD ====================
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
