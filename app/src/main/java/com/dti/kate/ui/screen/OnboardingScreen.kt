@@ -1,7 +1,6 @@
 package com.dti.kate.ui.screen
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -13,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -151,12 +149,15 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         verticalArrangement = Arrangement.Center,
     ) {
         // Icon/Illustration
-        Image(
-            painter = painterResource(page.icon),
-            contentDescription = page.title,
-            modifier = Modifier
-                .size(200.dp)
-                .padding(bottom = 48.dp),
+        // Was a raw Image(painterResource(page.icon)) with no clip -
+        // rendered kate_avatar_source.png as an unmasked square (visible
+        // in testing on the onboarding screen specifically). Every other
+        // Compose screen (Login, Home, Splash, Register, ForgotPassword)
+        // already used the shared KateAvatar component, which clips to a
+        // circle correctly - this screen was the one that didn't.
+        com.dti.kate.ui.components.KateAvatar(
+            size = 200.dp,
+            modifier = Modifier.padding(bottom = 48.dp),
         )
 
         // Title
