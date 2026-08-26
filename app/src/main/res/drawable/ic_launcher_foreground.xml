@@ -1,16 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  kate_avatar_source.png has no alpha channel - it's a fully opaque
-  144x144 square with zero transparent margin. Wrapped in a plain
-  <bitmap> with no inset, the foreground layer filled almost the entire
-  108dp adaptive-icon canvas edge-to-edge, leaving no breathing room for
-  any launcher mask (circle/squircle/rounded-square) to work with - the
-  result read as a barely-clipped square rather than a clean shape on
-  every mask. Per Android's own spec, the foreground layer must be
-  108x108dp but the visible logo content should only be ~48-72dp,
-  centered, with the outer ~18dp on each side reserved for masking.
-  18% inset on all four sides (~19.4dp of 108dp) puts this in that range.
--->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:insetLeft="18%"
     android:insetTop="18%"

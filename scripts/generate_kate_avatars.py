@@ -199,69 +199,97 @@ def generate_avatar_state(source_img, state, config, output_dir):
         print(f"  ❌ Failed: {e}")
         return False
 
+def make_square_icon(source_img, size, bg_color=(124, 58, 237, 255)):
+    """Compose the launcher PNG: purple background + inset, centered avatar.
+    Mirrors the adaptive-icon layout (avatar at ~64% of canvas) so the
+    legacy PNG fallback matches what the adaptive icon looks like."""
+    canvas = Image.new('RGBA', (size, size), bg_color)
+    logo_size = int(size * 0.64)
+    logo = source_img.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+    offset = ((size - logo_size) // 2, (size - logo_size) // 2)
+    canvas.paste(logo, offset, logo)
+    return canvas
+
+def make_round_icon(square_img, size):
+    """Mask a square icon into a circle for the ic_launcher_round variant."""
+    mask = Image.new('L', (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size, size), fill=255)
+    round_icon = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    round_icon.paste(square_img, (0, 0), mask)
+    return round_icon
+
 def generate_app_icons(source_img, output_dir):
-    """Generate app launcher icons"""
+    """Generate legacy (pre-API-26) launcher icons for every density.
+    These are the fallback used on API 24-25 and act as a safety net
+    if adaptive icon resolution ever fails on a given device/launcher."""
     try:
         for density_name, size in ICON_SIZES.items():
-            resized = source_img.resize((size, size), Image.Resampling.LANCZOS)
-            
             density_dir = Path(output_dir) / density_name
             density_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Save both regular and round icons
-            resized.save(density_dir / "ic_launcher.png", "PNG", optimize=True)
-            resized.save(density_dir / "ic_launcher_round.png", "PNG", optimize=True)
-            
+
+            square = make_square_icon(source_img, size)
+            round_ = make_round_icon(square, size)
+
+            square.save(density_dir / "ic_launcher.png", "PNG", optimize=True)
+            round_.save(density_dir / "ic_launcher_round.png", "PNG", optimize=True)
+
         return True
     except Exception as e:
         print(f"  ❌ Failed to generate icons: {e}")
         return False
 
 def generate_adaptive_icon(output_dir):
-    """Generate adaptive icon XML (Android 8+)"""
-    # Create the adaptive icon directory
+    """Generate adaptive icon XML (Android 8+).
+
+    IMPORTANT: the root element for a launcher mipmap XML resource on
+    API 26+ MUST be <adaptive-icon> with <background> and <foreground>
+    children. A bare <layer-list> is NOT a valid adaptive icon and will
+    fail to resolve at runtime on API 26+, causing the OS to silently
+    fall back to the default Android robot icon. Do not "simplify" this
+    to a layer-list.
+    """
     adaptive_dir = Path(output_dir) / "mipmap-anydpi-v26"
     adaptive_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Foreground vector
-    foreground_xml = '''<?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/ic_launcher_foreground" />
-</layer-list>'''
-    
+
+    adaptive_icon_xml = '''<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>'''
+
     with open(adaptive_dir / "ic_launcher.xml", "w") as f:
-        f.write(foreground_xml)
+        f.write(adaptive_icon_xml)
     with open(adaptive_dir / "ic_launcher_round.xml", "w") as f:
-        f.write(foreground_xml)
-    
-    # Also create a simple foreground vector
+        f.write(adaptive_icon_xml)
+
+    # Foreground: the actual avatar bitmap, inset so it isn't clipped by
+    # circular/squircle/rounded-square launcher masks (Android's spec
+    # wants only the center ~66dp of the 108dp canvas holding real content).
     drawable_dir = Path(output_dir) / "drawable"
     drawable_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Simple vector shape for the foreground
-    vector_xml = '''<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#7C3AED"
-        android:pathData="M54,24 C37,24 24,37 24,54 C24,71 37,84 54,84 C71,84 84,71 84,54 C84,37 71,24 54,24Z"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2" />
-</vector>'''
-    
+
+    foreground_xml = '''<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="18%"
+    android:insetTop="18%"
+    android:insetRight="18%"
+    android:insetBottom="18%">
+    <bitmap
+        android:src="@drawable/kate_avatar_source"
+        android:gravity="center" />
+</inset>'''
+
     with open(drawable_dir / "ic_launcher_foreground.xml", "w") as f:
-        f.write(vector_xml)
-    
+        f.write(foreground_xml)
+
     # Background (purple)
     background_xml = '''<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="#7C3AED" />
 </shape>'''
-    
+
     with open(drawable_dir / "ic_launcher_background.xml", "w") as f:
         f.write(background_xml)
 
