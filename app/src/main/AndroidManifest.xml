@@ -25,6 +25,12 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Batch 5: voice-driven call actions (answer/decline/call back).
+         This is the single most sensitive permission added in this app -
+         it must be declared in Play Console's Data Safety form before
+         release, and Google reviews ANSWER_PHONE_CALLS usage more closely
+         than most permissions. See docs/ROADMAP.md Batch 5. -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
     <!-- ==================== HARDWARE ==================== -->
     <uses-permission android:name="android.permission.CAMERA" />

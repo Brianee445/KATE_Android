@@ -42,6 +42,16 @@ class KateCommandProcessor(
     private val contactsHelper: ContactsHelper,
     private val locationHelper: LocationHelper,
     private val permissionBridge: PermissionBridge,
+    // Batch 1/2 additions. Defaulted so existing call sites (HomeScreen,
+    // KateOverlayService) keep compiling without touching every
+    // constructor call - each real call site is updated to pass its own
+    // instances below, but the defaults keep this change non-breaking for
+    // anything still under construction elsewhere.
+    private val conversationMemory: ConversationMemory = ConversationMemory(context),
+    private val jokeService: JokeService = JokeService(),
+    private val settings: LocalSettingsStore = LocalSettingsStore(context),
+    private val wikipediaService: WikipediaService = WikipediaService(),
+    private val entitlements: com.dti.kate.billing.EntitlementStore = com.dti.kate.billing.EntitlementStore(context),
 ) {
     interface PermissionBridge {
         fun hasContacts(): Boolean
@@ -129,8 +139,25 @@ class KateCommandProcessor(
                     val contact = resolveContactFastPath(action.spokenName)
                     if (contact != null) {
                         val body = action.body ?: "Hi"
-                        deviceControl.sendSms(contact.phoneNumber, body)
-                        responseGenerator.speechForMessage(contact.name, tone)
+                        if (action.viaApp != null) {
+                            // App-targeted send (WhatsApp/Messenger) - see
+                            // MessagingAppAutomator's doc comment on why
+                            // this is meaningfully more fragile than plain
+                            // SMS. On failure (app not installed, UI
+                            // selectors didn't match this build, etc.) we
+                            // deliberately do NOT silently fall back to SMS:
+                            // the user asked for a specific app, and SMS'ing
+                            // a person who doesn't check texts defeats the
+                            // point of naming the app at all. Instead we
+                            // tell them plainly it didn't work and let them
+                            // decide.
+                            val sent = deviceControl.sendViaMessagingApp(action.viaApp, contact.name, body)
+                            if (sent) responseGenerator.speechForMessageViaApp(contact.name, action.viaApp, tone)
+                            else responseGenerator.speechForMessageViaAppFailed(contact.name, action.viaApp, tone)
+                        } else {
+                            deviceControl.sendSms(contact.phoneNumber, body)
+                            responseGenerator.speechForMessage(contact.name, tone)
+                        }
                     } else {
                         responseGenerator.speechForContactNotFound(action.spokenName, tone)
                     }
@@ -150,15 +177,122 @@ class KateCommandProcessor(
                 }
             }
             is KateAction.WebSearch -> {
+                // DuckDuckGo first (fast, good for definitions/facts), then
+                // Wikipedia summary as a fallback for the many topics DDG's
+                // instant-answer API just doesn't cover (see WikipediaService
+                // doc comment) - only then do we admit defeat and offer a
+                // browser search, same as before.
                 val answer = webSearchService.getInstantAnswer(action.query)
+                    ?: wikipediaService.getSummary(action.query)
                 if (answer != null) responseGenerator.speechForSearchAnswer(answer, tone)
                 else responseGenerator.speechForSearchNoAnswer(tone)
             }
             KateAction.Help -> responseGenerator.speechForHelp(tone)
+
+            // ---- Batch 1 additions ----
+            KateAction.CurrentTime -> {
+                val formatted = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
+                    .format(java.util.Date())
+                responseGenerator.speechForCurrentTime(formatted, tone)
+            }
+            KateAction.SetAlarm -> {
+                // No dangerous permission needed: ACTION_SET_ALARM is a
+                // public implicit intent handled by whatever clock app is
+                // installed, which opens pre-filled for the user to confirm.
+                // We deliberately don't try to parse "7am" -> hour/minute
+                // extras here yet - the clock app's own UI handles that
+                // confirmation step, and a misparsed hour that silently
+                // sets the wrong alarm is worse than one extra tap.
+                try {
+                    val intent = android.content.Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    responseGenerator.speechForSetAlarmHandoff(tone)
+                } catch (e: Exception) {
+                    responseGenerator.speechForUnknown(tone)
+                }
+            }
+            KateAction.WhoMadeYou -> responseGenerator.speechForWhoMadeYou(tone)
+            KateAction.WhoAreYou -> responseGenerator.speechForWhoAreYou(tone, settings.getUserName())
+            is KateAction.Calculate -> {
+                val result = MathEvaluator.evaluate(action.expression)
+                if (result != null) responseGenerator.speechForCalculationResult(action.expression, result, tone)
+                else responseGenerator.speechForCalculationFailed(tone)
+            }
+            KateAction.TellJoke -> {
+                // Premium+ feature - see billing.FeatureGate. Free-tier
+                // users get a clear upsell instead of the joke silently
+                // not working, so the gate is visible rather than feeling
+                // like a bug.
+                if (!entitlements.isUnlocked(com.dti.kate.billing.GatedFeature.JOKES)) {
+                    responseGenerator.speechForFeatureLocked(tone)
+                } else {
+                    val joke = jokeService.getJoke(tone)
+                    if (joke != null) responseGenerator.speechForJoke(joke, tone)
+                    else responseGenerator.speechForJokeFailed(tone)
+                }
+            }
+            is KateAction.SmallTalk ->
+                responseGenerator.speechForSmallTalk(action.kind, tone, settings.getUserName())
+
+            // ---- Batch 3 additions ----
+            KateAction.GoHome -> responseGenerator.speechForGoHome(deviceControl.goHome(), tone)
+            KateAction.GoBack -> responseGenerator.speechForGoBack(deviceControl.goBack(), tone)
+            KateAction.ShowRecents -> responseGenerator.speechForShowRecents(deviceControl.showRecentApps(), tone)
+            KateAction.LockScreen -> responseGenerator.speechForLockScreen(deviceControl.lockScreen(), tone)
+            KateAction.TakeScreenshot -> responseGenerator.speechForScreenshot(deviceControl.takeScreenshot(), tone)
+
+            // ---- Batch 5 additions ----
+            KateAction.AnswerCall -> {
+                val success = deviceControl.answerCall()
+                if (success) responseGenerator.speechForCallAnswered(tone)
+                else responseGenerator.speechForCallActionFailed(tone)
+            }
+            KateAction.DeclineCall -> {
+                val success = deviceControl.declineCall()
+                if (success) responseGenerator.speechForCallDeclined(tone)
+                else responseGenerator.speechForCallActionFailed(tone)
+            }
+
             KateAction.Unknown -> responseGenerator.speechForUnknown(tone)
         }
 
+        conversationMemory.record(userText = query, kateReply = speech, topic = topicLabel(action))
         return Result(action, speech)
+    }
+
+    /** Coarse label stored alongside each turn - see ConversationTurn's doc
+     * comment for why this stays a simple string rather than reusing
+     * KateAction itself (which isn't Room-storable without a type converter
+     * we don't otherwise need yet). */
+    private fun topicLabel(action: KateAction): String = when (action) {
+        is KateAction.OpenApp -> "open_app"
+        is KateAction.PlayMusic -> "music"
+        is KateAction.TypeText -> "type_text"
+        is KateAction.ToggleTorch -> "torch"
+        is KateAction.ToggleBluetooth -> "bluetooth"
+        is KateAction.ToggleWifi -> "wifi"
+        is KateAction.SetVolume -> "volume"
+        is KateAction.MakeCall -> "call"
+        is KateAction.SendMessage -> "message"
+        KateAction.Weather -> "weather"
+        is KateAction.WebSearch -> "search"
+        KateAction.CurrentTime -> "time"
+        KateAction.SetAlarm -> "alarm"
+        KateAction.WhoMadeYou, KateAction.WhoAreYou -> "identity"
+        is KateAction.Calculate -> "math"
+        KateAction.TellJoke -> "joke"
+        is KateAction.SmallTalk -> "smalltalk"
+        KateAction.GoHome -> "go_home"
+        KateAction.GoBack -> "go_back"
+        KateAction.ShowRecents -> "recents"
+        KateAction.LockScreen -> "lock_screen"
+        KateAction.TakeScreenshot -> "screenshot"
+        KateAction.AnswerCall -> "answer_call"
+        KateAction.DeclineCall -> "decline_call"
+        KateAction.Help -> "help"
+        KateAction.Unknown -> "unknown"
     }
 
     /** Direct fuzzy-match only - see class doc's KNOWN SIMPLIFICATION for what this deliberately doesn't do. */

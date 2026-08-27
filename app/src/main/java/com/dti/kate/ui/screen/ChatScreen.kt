@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,8 +20,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.dti.kate.repository.Repository
+import com.dti.kate.core.*
+import com.dti.kate.utils.DeviceControlManager
 import com.dti.kate.ui.theme.*
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -30,15 +32,49 @@ private data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),
     val text: String,
     val isUser: Boolean,
-    val requiresPayment: Boolean = false,
 )
 
+/**
+ * Previously called Repository.chat(), a remote backend endpoint that was
+ * never actually live - every message silently failed over to "couldn't
+ * reach the server", which is why chat "didn't work at all". Now routed
+ * through the same KateCommandProcessor the voice/overlay path uses, so
+ * typed chat gets identical intent handling: small talk, jokes, weather,
+ * math, search (DuckDuckGo -> Wikipedia fallback), device control, etc.
+ * This also means chat now shares ConversationMemory with voice - a
+ * question asked by voice can be followed up on by typing, and vice versa.
+ */
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun ChatScreen(navController: NavController) {
     val context = LocalContext.current
-    val repository = remember { Repository(context.applicationContext) }
     val coroutineScope = rememberCoroutineScope()
     val listState: LazyListState = rememberLazyListState()
+
+    val locationPermission = rememberPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+    val contactsPermission = rememberPermissionState(android.Manifest.permission.READ_CONTACTS)
+
+    val settings = remember { LocalSettingsStore(context) }
+    val responseGenerator = remember { KateResponseGenerator() }
+    val commandProcessor = remember {
+        KateCommandProcessor(
+            context = context,
+            responseGenerator = responseGenerator,
+            deviceControl = DeviceControlManager(context),
+            weatherService = WeatherService(),
+            webSearchService = WebSearchService(),
+            appLauncher = AppLauncher(context),
+            musicLauncher = MusicLauncher(context),
+            contactsHelper = ContactsHelper(context),
+            locationHelper = LocationHelper(context),
+            permissionBridge = object : KateCommandProcessor.PermissionBridge {
+                override fun hasContacts() = contactsPermission.status.isGranted
+                override fun hasLocation() = locationPermission.status.isGranted
+                override fun requestContacts() = contactsPermission.launchPermissionRequest()
+                override fun requestLocation() = locationPermission.launchPermissionRequest()
+            },
+        )
+    }
 
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
     var inputText by remember { mutableStateOf("") }
@@ -52,19 +88,17 @@ fun ChatScreen(navController: NavController) {
         isSending = true
 
         coroutineScope.launch {
-            val result = repository.chat(query)
-            result.onSuccess { response ->
-                messages = messages + ChatMessage(
-                    text = response.response,
-                    isUser = false,
-                    requiresPayment = response.requiresPayment,
-                )
-            }.onFailure {
-                messages = messages + ChatMessage(
-                    text = "Sorry, I couldn't reach the server. Check your connection and try again.",
-                    isUser = false,
-                )
+            val tone = toneFromSlider(settings.getToneLevel())
+            val result = try {
+                commandProcessor.process(query, tone)
+            } catch (e: Exception) {
+                null
             }
+            messages = messages + ChatMessage(
+                text = result?.speech
+                    ?: "Something went wrong on my end - mind trying that again?",
+                isUser = false,
+            )
             isSending = false
             if (messages.isNotEmpty()) {
                 listState.animateScrollToItem(messages.size - 1)
@@ -104,7 +138,8 @@ fun ChatScreen(navController: NavController) {
             if (messages.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(
-                        "Ask Kate anything - this goes through her full backend, not just on-device commands.",
+                        "Say hi, ask a question, or give Kate something to do - " +
+                            "she handles this the same way she does when you talk to her out loud.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         modifier = Modifier.padding(32.dp),
@@ -118,7 +153,7 @@ fun ChatScreen(navController: NavController) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(messages, key = { it.id }) { message ->
-                        ChatBubble(message = message, onUpgradeClick = { navController.navigate("premium") })
+                        ChatBubble(message = message)
                     }
                     if (isSending) {
                         item {
@@ -156,7 +191,7 @@ fun ChatScreen(navController: NavController) {
 }
 
 @Composable
-private fun ChatBubble(message: ChatMessage, onUpgradeClick: () -> Unit) {
+private fun ChatBubble(message: ChatMessage) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
@@ -175,15 +210,7 @@ private fun ChatBubble(message: ChatMessage, onUpgradeClick: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (message.isUser) androidx.compose.ui.graphics.Color.White else TextPrimary,
             )
-
-            if (message.requiresPayment) {
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(onClick = onUpgradeClick) {
-                    Icon(Icons.Outlined.Lock, contentDescription = null, tint = LimeAccent, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Unlock with Premium", color = LimeAccent, style = MaterialTheme.typography.labelMedium)
-                }
-            }
         }
     }
 }
+

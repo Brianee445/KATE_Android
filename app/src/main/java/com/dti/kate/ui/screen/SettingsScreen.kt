@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -96,6 +97,13 @@ class SettingsViewModel(private val context: Context) {
                     email = profile.email,
                     tier = profile.tier,
                 )
+                // Mirror the backend's tier into the fast local read used
+                // by FeatureGate checks (jokes, tone slider, wake word) -
+                // see EntitlementStore's doc comment for why this needs
+                // syncing rather than being read from the backend directly
+                // on every gate check.
+                com.dti.kate.billing.EntitlementStore(context)
+                    .setTier(com.dti.kate.billing.SubscriptionTier.fromId(profile.tier))
                 _settings.value = _settings.value.copy(syncTraining = profile.syncTrainingEnabled)
                 LocalSettingsStore(context).setSyncTrainingEnabled(profile.syncTrainingEnabled)
                 _errorMessage.value = null
@@ -250,6 +258,13 @@ fun SettingsScreen(
     val isLoading by viewModel.isLoading
     val errorMessage by viewModel.errorMessage
     val actionMessage by viewModel.actionMessage
+    // Re-read fresh each recomposition rather than cached in remember{} -
+    // this is a cheap SharedPreferences read, and staying live means the
+    // gates below unlock immediately after a purchase/tier-sync without
+    // needing this screen to be reopened.
+    val entitlements = com.dti.kate.billing.EntitlementStore(context)
+    val toneUnlocked = entitlements.isUnlocked(com.dti.kate.billing.GatedFeature.TONE_SLIDER)
+    val wakeWordUnlocked = entitlements.isUnlocked(com.dti.kate.billing.GatedFeature.WAKE_WORD)
     val coroutineScope = rememberCoroutineScope()
 
     var showClearConfirm by remember { mutableStateOf(false) }
@@ -332,11 +347,20 @@ fun SettingsScreen(
 
             item { SettingsSectionHeader(title = "Wake Triggers") }
             items(settings.wakeTriggers) { trigger ->
+                // "Hey Kate" wake word is Premium+ (see billing.FeatureGate) -
+                // raise-to-wake and shake stay free. Locked instead of
+                // hidden so free users know the feature exists and can
+                // upgrade to it, rather than wondering where it went.
+                val isWakeWordRow = trigger.id == "wakeword"
+                val locked = isWakeWordRow && !wakeWordUnlocked
                 SettingsSwitchItem(
                     title = trigger.label,
-                    description = trigger.description,
-                    checked = trigger.enabled,
-                    onCheckedChange = { viewModel.toggleWakeTrigger(trigger.id) },
+                    description = if (locked) "Premium feature - tap to upgrade" else trigger.description,
+                    checked = trigger.enabled && !locked,
+                    onCheckedChange = {
+                        if (locked) navController.navigate("premium")
+                        else viewModel.toggleWakeTrigger(trigger.id)
+                    },
                 )
             }
 
@@ -360,18 +384,31 @@ fun SettingsScreen(
 
             item { SettingsSectionHeader(title = "Personality") }
             item {
+                // Tone slider is Premium+ (see billing.FeatureGate) - shown
+                // but disabled with an upgrade prompt for free users, same
+                // "visible but locked" approach as the wake-word row above.
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (!toneUnlocked) Modifier.clickable { navController.navigate("premium") }
+                            else Modifier
+                        ),
                     colors = CardDefaults.cardColors(containerColor = Surface),
                     shape = KateShape.MD,
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "Tone: ${(settings.toneLevel * 100).toInt()}% Sass", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                    Column(modifier = Modifier.padding(16.dp).alpha(if (toneUnlocked) 1f else 0.5f)) {
+                        Text(
+                            text = if (toneUnlocked) "Tone: ${(settings.toneLevel * 100).toInt()}% Sass"
+                                else "Tone slider - Premium feature",
+                            style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
+                        )
                         Slider(
                             value = settings.toneLevel,
                             onValueChange = { viewModel.updateTone(it) },
                             valueRange = 0f..1f,
                             steps = 4,
+                            enabled = toneUnlocked,
                             colors = SliderDefaults.colors(thumbColor = Purple70, activeTrackColor = Purple70, inactiveTrackColor = Divider),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -379,6 +416,14 @@ fun SettingsScreen(
                             Text("Professional", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                             Text("Balanced", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                             Text("Maximum Sass", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        }
+                        if (!toneUnlocked) {
+                            Text(
+                                "Tap to upgrade",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LimeAccent,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
                         }
                     }
                 }
@@ -448,11 +493,19 @@ fun SettingsScreen(
                 }
             }
             item {
+                // This toggle previously wrote a boolean to prefs that
+                // nothing else in the app read - flipping it changed
+                // nothing about Kate's actual behavior (speech recognition
+                // still requires connectivity regardless). Disabled with
+                // honest copy until real offline STT/response-caching
+                // ships, rather than leaving a switch that silently does
+                // nothing - see docs/ROADMAP.md.
                 SettingsSwitchItem(
                     title = "Offline Mode",
-                    description = "Use cached responses when offline",
-                    checked = settings.offlineMode,
-                    onCheckedChange = { viewModel.toggleOfflineMode() },
+                    description = "Coming soon - stay tuned",
+                    checked = false,
+                    onCheckedChange = {},
+                    enabled = false,
                 )
             }
 
@@ -617,24 +670,38 @@ private fun SettingsSectionHeader(title: String) {
 }
 
 @Composable
-private fun SettingsSwitchItem(title: String, description: String, checked: Boolean, onCheckedChange: () -> Unit) {
+private fun SettingsSwitchItem(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: () -> Unit,
+    enabled: Boolean = true,
+) {
+    // Dimmed when disabled (e.g. "Offline Mode - coming soon") so a
+    // not-yet-functional toggle reads as unavailable rather than as a
+    // switch that silently does nothing when tapped.
+    val contentAlpha = if (enabled) 1f else 0.5f
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = KateShape.MD,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { onCheckedChange() }.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled) { onCheckedChange() }
+                .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).alpha(contentAlpha)) {
                 Text(text = title, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
                 Text(text = description, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
             Switch(
                 checked = checked,
                 onCheckedChange = { onCheckedChange() },
+                enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Purple70,
                     checkedTrackColor = Purple70.copy(alpha = 0.5f),

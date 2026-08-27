@@ -16,11 +16,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.dti.kate.R
+import com.dti.kate.core.LocalSettingsStore
 import com.dti.kate.ui.components.KateButton
 import com.dti.kate.ui.components.KateButtonSize
 import com.dti.kate.ui.components.KateButtonType
+import com.dti.kate.ui.components.KateTextField
 import com.dti.kate.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -36,9 +39,20 @@ data class OnboardingPage(
 fun OnboardingScreen(
     navController: NavController,
 ) {
+    val context = LocalContext.current
+    val settings = remember { LocalSettingsStore(context) }
+    var userName by remember { mutableStateOf("") }
+
+    // 4 pages now: the original 3 info slides plus a name-capture step at
+    // the end. Name is asked last (not first) so it doesn't front-load a
+    // text-input chore before the user has any sense of what the app is -
+    // by the "Privacy Matters" slide they've already committed to
+    // continuing, so asking then reads as "getting acquainted" rather than
+    // a form.
+    val pageCount = 4
     val pagerState = rememberPagerState(
         initialPage = 0,
-        pageCount = { 3 },
+        pageCount = { pageCount },
     )
     val coroutineScope = rememberCoroutineScope()
 
@@ -46,7 +60,7 @@ fun OnboardingScreen(
     val onboardingPages = listOf(
         OnboardingPage(
             title = "Meet Kate",
-            description = "Your offline-first AI voice assistant. Smart. Private. Always ready.",
+            description = "Your AI voice assistant. Smart, personal, and always ready to help.",
             icon = R.drawable.kate_avatar_source,
         ),
         OnboardingPage(
@@ -55,8 +69,9 @@ fun OnboardingScreen(
             icon = R.drawable.kate_avatar_source,
         ),
         OnboardingPage(
-            title = "Privacy First",
-            description = "Everything stays on your device. No cloud required. Your data, your rules.",
+            title = "Privacy Matters",
+            description = "Your voice is only captured while actively listening for a command. " +
+                "Offline mode is coming soon - stay tuned.",
             icon = R.drawable.kate_avatar_source,
         ),
     )
@@ -75,7 +90,10 @@ fun OnboardingScreen(
         ) {
             KateButton(
                 text = "Skip",
-                onClick = { navController.navigate("login") },
+                onClick = {
+                    if (userName.isNotBlank()) settings.setUserName(userName)
+                    navController.navigate("login")
+                },
                 type = KateButtonType.Ghost,
                 size = KateButtonSize.Small,
             )
@@ -88,7 +106,11 @@ fun OnboardingScreen(
                 .weight(1f)
                 .fillMaxWidth(),
         ) { page ->
-            OnboardingPageContent(page = onboardingPages[page])
+            if (page < onboardingPages.size) {
+                OnboardingPageContent(page = onboardingPages[page])
+            } else {
+                NameCaptureContent(name = userName, onNameChange = { userName = it })
+            }
         }
 
         // Indicators + Buttons
@@ -103,7 +125,7 @@ fun OnboardingScreen(
                 modifier = Modifier.padding(bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                repeat(3) { index ->
+                repeat(pageCount) { index ->
                     Box(
                         modifier = Modifier
                             .size(
@@ -120,10 +142,16 @@ fun OnboardingScreen(
             }
 
             // Next / Get Started button
+            val isLastPage = pagerState.currentPage == pageCount - 1
             KateButton(
-                text = if (pagerState.currentPage == 2) "Get Started" else "Next",
+                text = if (isLastPage) "Get Started" else "Next",
                 onClick = {
-                    if (pagerState.currentPage == 2) {
+                    if (isLastPage) {
+                        // Blank name is fine - getUserName() treats blank as
+                        // "not set" (see LocalSettingsStore doc comment), so
+                        // Kate just skips personalized greetings rather than
+                        // blocking onboarding on a required field.
+                        if (userName.isNotBlank()) settings.setUserName(userName)
                         navController.navigate("login")
                     } else {
                         coroutineScope.launch {
@@ -136,6 +164,57 @@ fun OnboardingScreen(
                 size = KateButtonSize.Large,
             )
         }
+    }
+}
+
+@Composable
+private fun NameCaptureContent(name: String, onNameChange: (String) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        com.dti.kate.ui.components.KateAvatar(
+            size = 160.dp,
+            modifier = Modifier.padding(bottom = 40.dp),
+        )
+
+        Text(
+            text = "What should I call you?",
+            style = MaterialTheme.typography.headlineLarge.copy(
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+            ),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+
+        Text(
+            text = "So conversations feel a little more like talking to a friend.",
+            style = MaterialTheme.typography.bodyLarge.copy(
+                color = TextSecondary,
+                lineHeight = 24.sp,
+            ),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 32.dp),
+        )
+
+        KateTextField(
+            value = name,
+            onValueChange = onNameChange,
+            placeholder = "Your name",
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Text(
+            text = "You can skip this - Kate works fine without it.",
+            style = MaterialTheme.typography.bodySmall.copy(color = TextTertiary),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 16.dp),
+        )
     }
 }
 

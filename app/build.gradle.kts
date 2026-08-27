@@ -175,6 +175,9 @@ dependencies {
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+
+    // ==================== BILLING ====================
+    implementation(libs.billing.ktx)
     implementation(libs.gson)
 
     implementation(libs.supabase.auth)

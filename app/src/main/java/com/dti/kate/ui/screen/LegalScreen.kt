@@ -28,7 +28,11 @@ fun PrivacyPolicyScreen(navController: NavController) {
         )
         LegalSection(
             heading = "Third-party services",
-            body = "Weather lookups use Open-Meteo. Web search answers use DuckDuckGo's Instant Answer API. Neither service receives your account identity - only the text of your query."
+            body = "Weather lookups use Open-Meteo. Web search answers use DuckDuckGo's Instant Answer API, with Wikipedia's summary API as a fallback when DuckDuckGo has no answer. Jokes are fetched from JokeAPI. None of these services receive your account identity - only the text of your query. Math/calculation requests are handled entirely on-device and never sent anywhere."
+        )
+        LegalSection(
+            heading = "Offline mode",
+            body = "Kate is not fully offline-capable yet - speech recognition currently requires an internet connection. A true offline mode is planned; this policy will be updated when it ships. Stay tuned."
         )
         LegalSection(
             heading = "Data sharing",

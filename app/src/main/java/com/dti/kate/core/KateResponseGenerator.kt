@@ -15,7 +15,7 @@ sealed class KateAction {
     data class TypeText(val text: String) : KateAction()
     data class ToggleTorch(val turnOn: Boolean?) : KateAction()
     data class MakeCall(val spokenName: String) : KateAction()
-    data class SendMessage(val spokenName: String, val body: String?) : KateAction()
+    data class SendMessage(val spokenName: String, val body: String?, val viaApp: MessagingApp? = null) : KateAction()
     data class ToggleBluetooth(val turnOn: Boolean?) : KateAction()
     data class ToggleWifi(val turnOn: Boolean?) : KateAction()
     data class SetVolume(val level: Int?, val increase: Boolean?) : KateAction()
@@ -23,7 +23,40 @@ sealed class KateAction {
     object Weather : KateAction()
     data class WebSearch(val query: String, val openBrowser: Boolean) : KateAction()
     data class PlayMusic(val song: String) : KateAction()
+
+    // ---- Batch 1 additions ----
+    object CurrentTime : KateAction()
+    object SetAlarm : KateAction()
+    object WhoMadeYou : KateAction()
+    object WhoAreYou : KateAction()
+    data class Calculate(val expression: String) : KateAction()
+    object TellJoke : KateAction()
+    data class SmallTalk(val kind: SmallTalkKind) : KateAction()
+
+    // ---- Batch 3 additions ----
+    object GoHome : KateAction()
+    object GoBack : KateAction()
+    object ShowRecents : KateAction()
+    object LockScreen : KateAction()
+    object TakeScreenshot : KateAction()
+
+    // ---- Batch 5 additions ----
+    object AnswerCall : KateAction()
+    object DeclineCall : KateAction()
+
     object Unknown : KateAction()
+}
+
+enum class SmallTalkKind { GREETING, HOW_ARE_YOU, THANKS, GOODBYE, COMPLIMENT }
+
+/** Which app to route SendMessage through - null means "no app specified,
+ * use plain SMS" (DeviceControlManager.sendSms, unchanged from before).
+ * Kept as its own enum rather than a raw package-name string so
+ * classify()'s phrase-matching and MessagingAppAutomator's per-app
+ * selectors both key off the same small closed set. */
+enum class MessagingApp(val packageName: String, val displayName: String) {
+    WHATSAPP("com.whatsapp", "WhatsApp"),
+    MESSENGER("com.facebook.orca", "Messenger"),
 }
 
 data class KateReply(val action: KateAction, val speech: String)
@@ -57,6 +90,95 @@ class KateResponseGenerator {
         val lower = text.lowercase().trim()
 
         return when {
+            // ---- Identity - checked early so "who made you" doesn't fall
+            // into the generic "who/what/..." WebSearch catch-all below.
+            (lower.contains("who made you") || lower.contains("who created you") ||
+                lower.contains("who built you") || lower.contains("who is your creator") ||
+                lower.contains("who developed you")) ->
+                KateAction.WhoMadeYou
+
+            (lower.contains("what's your name") || lower.contains("whats your name") ||
+                lower.contains("who are you") || lower == "your name") ->
+                KateAction.WhoAreYou
+
+            // ---- Time - before Weather so "what time" doesn't get caught
+            // by an unrelated word overlap, and before WebSearch's "what "
+            // catch-all.
+            (lower.contains("what time is it") || lower.contains("what's the time") ||
+                lower.contains("whats the time") || lower.contains("current time") ||
+                lower == "time") ->
+                KateAction.CurrentTime
+
+            // ---- Alarm - "set an alarm", "wake me up at 7", "alarm for 7am"
+            (lower.contains("alarm") || (lower.contains("wake me") && lower.contains("at"))) &&
+                !lower.contains("stop") && !lower.contains("cancel") ->
+                KateAction.SetAlarm
+
+            // ---- Math - checked before WebSearch's "what "/"how " catch-all,
+            // since "what's 12 times 4" would otherwise be treated as a
+            // search query. looksLikeMath is a cheap pre-filter; evaluate()
+            // itself is the real gate (returns null -> falls through to
+            // Unknown at execution time, see KateCommandProcessor).
+            MathEvaluator.looksLikeMath(lower) ->
+                KateAction.Calculate(text)
+
+            // ---- Jokes
+            (lower.contains("joke") || lower.contains("make me laugh") ||
+                lower.contains("say something funny")) ->
+                KateAction.TellJoke
+
+            // ---- Batch 3: global device actions. Checked with fairly
+            // specific phrases (not bare "back"/"home") since those single
+            // words are common in unrelated sentences a real transcript
+            // might produce ("I'm going home later", "back to what I said").
+            (lower == "go home" || lower.contains("go to home screen") ||
+                lower.contains("go to the home screen") || lower.contains("take me home")) ->
+                KateAction.GoHome
+
+            (lower == "go back" || lower.contains("navigate back") ||
+                lower.contains("go back a screen") || lower.contains("go back one screen")) ->
+                KateAction.GoBack
+
+            (lower.contains("recent apps") || lower.contains("show recents") ||
+                lower.contains("open recents") || lower.contains("app switcher")) ->
+                KateAction.ShowRecents
+
+            (lower.contains("lock my phone") || lower.contains("lock the phone") ||
+                lower.contains("lock screen") || lower == "lock it") ->
+                KateAction.LockScreen
+
+            (lower.contains("take a screenshot") || lower.contains("screenshot") ||
+                lower.contains("capture the screen") || lower.contains("capture my screen")) ->
+                KateAction.TakeScreenshot
+
+            // ---- Batch 5: in-call voice actions. Deliberately specific
+            // phrases ("answer the call"/"pick up") rather than bare
+            // "answer" or "pick up", which are common in unrelated
+            // sentences. These only make sense to fire while a call is
+            // actually ringing - KateCommandProcessor doesn't currently
+            // gate classification on call state, so an answer/decline
+            // command spoken with no call ringing just harmlessly no-ops
+            // at the TelecomManager/accessibility layer (see that file).
+            (lower.contains("answer the call") || lower.contains("answer call") ||
+                lower.contains("pick up the call") || lower == "pick up" || lower == "answer") ->
+                KateAction.AnswerCall
+
+            (lower.contains("decline the call") || lower.contains("decline call") ||
+                lower.contains("reject the call") || lower.contains("hang up the call") ||
+                lower.contains("send to voicemail")) ->
+                KateAction.DeclineCall
+
+            // ---- Small talk - kept lightweight (contains/startsWith on a
+            // short curated list) rather than exhaustive, since the goal is
+            // "feels conversational for common openers", not full chit-chat
+            // coverage - anything unmatched still reaches Unknown/WebSearch
+            // as before.
+            isGreeting(lower) -> KateAction.SmallTalk(SmallTalkKind.GREETING)
+            isHowAreYou(lower) -> KateAction.SmallTalk(SmallTalkKind.HOW_ARE_YOU)
+            isThanks(lower) -> KateAction.SmallTalk(SmallTalkKind.THANKS)
+            isGoodbye(lower) -> KateAction.SmallTalk(SmallTalkKind.GOODBYE)
+            isCompliment(lower) -> KateAction.SmallTalk(SmallTalkKind.COMPLIMENT)
+
             lower.contains("weather") || lower.contains("temperature") || lower.contains("forecast") ->
                 KateAction.Weather
 
@@ -86,8 +208,33 @@ class KateResponseGenerator {
             }
 
             lower.startsWith("message ") || lower.startsWith("text ") -> {
-                // "message chidinma" or "message chidinma saying I'm running late"
-                val rest = extractAfterTrigger(lower, listOf("message ", "text "))
+                // "message chidinma" / "message chidinma saying I'm running
+                // late" / "message chidinma on whatsapp saying I'm running
+                // late" - app tag is parsed out before the "saying" split so
+                // "on whatsapp" doesn't end up mistaken for part of the name
+                // or the message body.
+                var rest = extractAfterTrigger(lower, listOf("message ", "text "))
+
+                var viaApp: MessagingApp? = null
+                for (app in MessagingApp.entries) {
+                    val tag = " on ${app.displayName.lowercase()}"
+                    if (rest.contains(tag)) {
+                        viaApp = app
+                        rest = rest.replace(tag, "")
+                        break
+                    }
+                }
+                // "facebook" alone (not "messenger") is common spoken
+                // shorthand for Facebook Messenger specifically - handled
+                // as a separate alias rather than adding it to the enum's
+                // displayName, since "Facebook" the app and "Messenger" the
+                // app are different packages and this app only automates
+                // Messenger.
+                if (viaApp == null && rest.contains(" on facebook")) {
+                    viaApp = MessagingApp.MESSENGER
+                    rest = rest.replace(" on facebook", "")
+                }
+
                 val sayingIdx = rest.indexOf(" saying ")
                 val name: String
                 val body: String?
@@ -98,7 +245,7 @@ class KateResponseGenerator {
                     name = rest.trim()
                     body = null
                 }
-                if (name.isNotBlank()) KateAction.SendMessage(name, body) else KateAction.Unknown
+                if (name.isNotBlank()) KateAction.SendMessage(name, body, viaApp) else KateAction.Unknown
             }
 
             lower.startsWith("play ") -> {
@@ -139,6 +286,38 @@ class KateResponseGenerator {
             else -> KateAction.Unknown
         }
     }
+
+    // ==================== SMALL TALK DETECTION ====================
+    // Deliberately exact/near-exact matches rather than .contains() for most
+    // of these - "hi" as a .contains() would misfire on words like "history"
+    // or "chill", which real transcripts do produce.
+
+    private val GREETING_WORDS = setOf(
+        "hi", "hello", "hey", "yo", "hiya", "sup", "what's up", "whats up",
+        "good morning", "good afternoon", "good evening",
+    )
+
+    private fun isGreeting(lower: String): Boolean =
+        GREETING_WORDS.any { lower == it || lower.startsWith("$it ") || lower.startsWith("$it,") || lower.startsWith("$it kate") }
+
+    private fun isHowAreYou(lower: String): Boolean =
+        lower.contains("how are you") || lower.contains("how's it going") ||
+            lower.contains("hows it going") || lower.contains("how you doing") ||
+            lower.contains("how are things")
+
+    private fun isThanks(lower: String): Boolean =
+        lower == "thanks" || lower == "thank you" || lower.startsWith("thanks ") ||
+            lower.startsWith("thank you") || lower.contains("appreciate it")
+
+    private fun isGoodbye(lower: String): Boolean =
+        lower == "bye" || lower == "goodbye" || lower.startsWith("bye ") ||
+            lower.contains("see you later") || lower.contains("talk to you later") ||
+            lower.contains("gotta go") || lower.contains("good night")
+
+    private fun isCompliment(lower: String): Boolean =
+        (lower.contains("you're") || lower.contains("youre") || lower.contains("you are")) &&
+            (lower.contains("smart") || lower.contains("great") || lower.contains("awesome") ||
+                lower.contains("amazing") || lower.contains("the best") || lower.contains("cool"))
 
     private fun detectOnOff(lower: String): Boolean? = when {
         lower.contains(" on") || lower.endsWith("on") -> true
@@ -229,6 +408,24 @@ class KateResponseGenerator {
         KateTone.BALANCED -> listOf("Sending that to $contactName.", "Message sent to $contactName.")
         KateTone.SASSY -> listOf("Firing that off to $contactName.", "Sent to $contactName, hope it's not a mistake.")
     })
+
+    fun speechForMessageViaApp(contactName: String, app: MessagingApp, tone: KateTone): String =
+        pick("message_via_app.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Sent to $contactName on ${app.displayName}.")
+            KateTone.BALANCED -> listOf("Sent that to $contactName on ${app.displayName}.")
+            KateTone.SASSY -> listOf("Fired that off to $contactName on ${app.displayName}.")
+        })
+
+    /** Deliberately does NOT suggest SMS as an automatic fallback in the
+     * wording - see KateCommandProcessor's comment on why a failed
+     * app-targeted send doesn't silently retry over SMS. The user can ask
+     * for SMS explicitly if that's what they want. */
+    fun speechForMessageViaAppFailed(contactName: String, app: MessagingApp, tone: KateTone): String =
+        pick("message_via_app_fail.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("I couldn't get that message to $contactName on ${app.displayName}. You may need to try it manually.")
+            KateTone.BALANCED -> listOf("That didn't go through to $contactName on ${app.displayName} - might need to send it yourself this time.")
+            KateTone.SASSY -> listOf("${app.displayName} didn't cooperate for $contactName. You're on your own for this one.")
+        })
 
     fun speechForContactNotFound(spokenName: String, tone: KateTone): String = pick("contact_not_found.$tone", when (tone) {
         KateTone.PROFESSIONAL -> listOf(
@@ -340,4 +537,197 @@ class KateResponseGenerator {
         KateTone.BALANCED -> listOf("Unplugged. You're on battery now.", "Charger's out - running on battery.")
         KateTone.SASSY -> listOf("Unplugged already? Living dangerously.", "Off the leash. Good luck with that battery.")
     })
+
+    // ==================== BATCH 1 ADDITIONS ====================
+
+    /** Fired the instant the overlay starts listening, before STT has
+     * transcribed anything - see KateOverlayService.startListenCycle. Kept
+     * very short since it's a "go ahead" cue, not a real reply. */
+    fun speechForListeningPrompt(tone: KateTone, userName: String?): String {
+        val name = userName?.let { ", $it" } ?: ""
+        return pick("listening_prompt.$tone.${userName != null}", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Yes$name?", "I'm listening.", "Go ahead.")
+            KateTone.BALANCED -> listOf("Yeah$name?", "I'm here, go ahead.", "What's up?")
+            KateTone.SASSY -> listOf("What now$name?", "This better be good.", "I'm all ears, dazzle me.")
+        })
+    }
+
+    fun speechForCurrentTime(formattedTime: String, tone: KateTone): String = pick("time.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("It's $formattedTime.", "The time is $formattedTime.")
+        KateTone.BALANCED -> listOf("It's $formattedTime right now.", "$formattedTime on the dot.")
+        KateTone.SASSY -> listOf("It's $formattedTime. Where do you need to be?", "$formattedTime - don't say I never told you.")
+    })
+
+    fun speechForSetAlarmHandoff(tone: KateTone): String = pick("alarm_handoff.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("Opening the clock app to set that alarm.")
+        KateTone.BALANCED -> listOf("Opening your clock app to finish setting that up.")
+        KateTone.SASSY -> listOf("Handing this off to the clock app - I don't do everything myself.")
+    })
+
+    fun speechForWhoMadeYou(tone: KateTone): String = pick("who_made_you.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf(
+            "I was created by Ede Johnwesley, the founder of Purple Labs.",
+        )
+        KateTone.BALANCED -> listOf(
+            "Ede Johnwesley made me - he's the founder of Purple Labs.",
+        )
+        KateTone.SASSY -> listOf(
+            "Ede Johnwesley built me over at Purple Labs. Good taste, right?",
+        )
+    })
+
+    fun speechForWhoAreYou(tone: KateTone, userName: String?): String {
+        val greeting = userName?.let { " Nice to talk with you, $it." } ?: ""
+        return pick("who_are_you.$tone.${userName != null}", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("I'm Kate, your personal assistant.$greeting")
+            KateTone.BALANCED -> listOf("I'm Kate.$greeting")
+            KateTone.SASSY -> listOf("I'm Kate - the one doing all the work around here.$greeting")
+        })
+    }
+
+    fun speechForCalculationResult(expression: String, result: String, tone: KateTone): String =
+        pick("calc_ok.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("That's $result.", "The answer is $result.")
+            KateTone.BALANCED -> listOf("That comes out to $result.", "That's $result.")
+            KateTone.SASSY -> listOf("$result. Easy.", "$result - did you really need me for that?")
+        })
+
+    fun speechForCalculationFailed(tone: KateTone): String = pick("calc_fail.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I couldn't work that one out - could you rephrase it?")
+        KateTone.BALANCED -> listOf("That one didn't parse for me - try saying it differently?")
+        KateTone.SASSY -> listOf("That math broke me a little. Try again, simpler.")
+    })
+
+    fun speechForJoke(joke: String, tone: KateTone): String = pick("joke_intro.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("Here's one: $joke", "$joke")
+        KateTone.BALANCED -> listOf("Okay, here goes: $joke", "$joke")
+        KateTone.SASSY -> listOf("Brace yourself: $joke", "This one's a classic: $joke")
+    })
+
+    fun speechForJokeFailed(tone: KateTone): String = pick("joke_fail.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I couldn't fetch a joke right now.")
+        KateTone.BALANCED -> listOf("Couldn't grab a joke just now, sorry.")
+        KateTone.SASSY -> listOf("Even my jokes are offline right now. Rough.")
+    })
+
+    /** Generic locked-feature response - used wherever a FeatureGate check
+     * fails (jokes today; tone slider and wake word are gated in Settings
+     * UI directly rather than here, since those aren't spoken commands). */
+    fun speechForFeatureLocked(tone: KateTone): String = pick("feature_locked.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("That feature is part of Premium. You can upgrade from Settings.")
+        KateTone.BALANCED -> listOf("That one's a Premium feature - you can upgrade any time from Settings.")
+        KateTone.SASSY -> listOf("Nice try - that's a Premium feature. Settings has the upgrade button.")
+    })
+
+    // ==================== BATCH 3 ADDITIONS ====================
+
+    fun speechForGoHome(success: Boolean, tone: KateTone): String =
+        if (success) pick("go_home_ok.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Going home.")
+            KateTone.BALANCED -> listOf("Heading home.", "On it.")
+            KateTone.SASSY -> listOf("Home it is.")
+        }) else speechForAccessibilityRequired(tone)
+
+    fun speechForGoBack(success: Boolean, tone: KateTone): String =
+        if (success) pick("go_back_ok.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Going back.")
+            KateTone.BALANCED -> listOf("Back you go.", "Going back.")
+            KateTone.SASSY -> listOf("Backing out.")
+        }) else speechForAccessibilityRequired(tone)
+
+    fun speechForShowRecents(success: Boolean, tone: KateTone): String =
+        if (success) pick("recents_ok.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Showing recent apps.")
+            KateTone.BALANCED -> listOf("Here's your recent apps.", "Pulling up recents.")
+            KateTone.SASSY -> listOf("Let's see what you've been up to.")
+        }) else speechForAccessibilityRequired(tone)
+
+    fun speechForLockScreen(success: Boolean, tone: KateTone): String =
+        if (success) pick("lock_ok.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Locking the screen.")
+            KateTone.BALANCED -> listOf("Locking it now.", "Screen locked.")
+            KateTone.SASSY -> listOf("Locking up. Don't forget your passcode.")
+        }) else speechForAccessibilityRequired(tone)
+
+    fun speechForScreenshot(success: Boolean, tone: KateTone): String =
+        if (success) pick("screenshot_ok.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Screenshot taken.")
+            KateTone.BALANCED -> listOf("Got it - screenshot saved.", "Screenshot taken.")
+            KateTone.SASSY -> listOf("Smile - screenshot taken.")
+        }) else speechForAccessibilityRequired(tone)
+
+    /** Shared fallback for every Batch 3 global action when the
+     * accessibility service isn't connected - same underlying cause
+     * (permission not granted, or granted but not yet connected), so one
+     * consistent message rather than five slightly different ones. */
+    fun speechForAccessibilityRequired(tone: KateTone): String = pick("accessibility_required.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I need accessibility permission enabled to do that. You can turn it on in Settings.")
+        KateTone.BALANCED -> listOf("I need the accessibility permission turned on for that - it's in Settings.")
+        KateTone.SASSY -> listOf("Can't do that without accessibility permission - go flip that on in Settings.")
+    })
+
+    // ==================== BATCH 5 ADDITIONS ====================
+
+    /** [callerNameOrNumber] is either a resolved contact name or, when the
+     * number isn't in contacts, the raw incoming number - see
+     * KateForegroundService.phoneStateReceiver. Kept short since this
+     * interrupts whatever the user is doing when the phone rings. */
+    fun speechForIncomingCall(callerNameOrNumber: String, tone: KateTone): String =
+        pick("incoming_call.$tone", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Incoming call from $callerNameOrNumber.")
+            KateTone.BALANCED -> listOf("$callerNameOrNumber is calling.", "Call from $callerNameOrNumber.")
+            KateTone.SASSY -> listOf("$callerNameOrNumber is calling - your move.")
+        })
+
+    fun speechForCallAnswered(tone: KateTone): String = pick("call_answered.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("Answering.")
+        KateTone.BALANCED -> listOf("Picking that up.", "Answering now.")
+        KateTone.SASSY -> listOf("Fine, answering it.")
+    })
+
+    fun speechForCallDeclined(tone: KateTone): String = pick("call_declined.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("Declining the call.")
+        KateTone.BALANCED -> listOf("Declining that.", "Sending it to voicemail.")
+        KateTone.SASSY -> listOf("Declined. They'll get over it.")
+    })
+
+    /** Used for both answer and decline failures - see
+     * KateCommandProcessor's comment on why there's no reliable public API
+     * for declining a call, which is the likelier of the two to fail. */
+    fun speechForCallActionFailed(tone: KateTone): String = pick("call_action_fail.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I wasn't able to do that for the call - you may need to handle it manually.")
+        KateTone.BALANCED -> listOf("That didn't work on the call - might have to grab it yourself.")
+        KateTone.SASSY -> listOf("The phone didn't listen to me this time. You're up.")
+    })
+
+    fun speechForSmallTalk(kind: SmallTalkKind, tone: KateTone, userName: String?): String {
+        val name = userName?.let { ", $it" } ?: ""
+        return when (kind) {
+            SmallTalkKind.GREETING -> pick("smalltalk_greet.$tone.${userName != null}", when (tone) {
+                KateTone.PROFESSIONAL -> listOf("Hello$name.", "Hi$name, how can I help?")
+                KateTone.BALANCED -> listOf("Hey$name!", "Hi$name, what's up?")
+                KateTone.SASSY -> listOf("Well hey$name.", "Look who's back$name.")
+            })
+            SmallTalkKind.HOW_ARE_YOU -> pick("smalltalk_how.$tone", when (tone) {
+                KateTone.PROFESSIONAL -> listOf("I'm functioning well, thank you. How can I help?")
+                KateTone.BALANCED -> listOf("I'm good! What about you?")
+                KateTone.SASSY -> listOf("Living my best digital life. You?")
+            })
+            SmallTalkKind.THANKS -> pick("smalltalk_thanks.$tone", when (tone) {
+                KateTone.PROFESSIONAL -> listOf("You're welcome.", "Happy to help.")
+                KateTone.BALANCED -> listOf("Anytime!", "No problem at all.")
+                KateTone.SASSY -> listOf("I know, I'm great.", "Don't mention it - seriously, you're welcome.")
+            })
+            SmallTalkKind.GOODBYE -> pick("smalltalk_bye.$tone.${userName != null}", when (tone) {
+                KateTone.PROFESSIONAL -> listOf("Goodbye$name.", "Talk soon.")
+                KateTone.BALANCED -> listOf("See you later$name!", "Catch you later.")
+                KateTone.SASSY -> listOf("Later$name. Try not to miss me.", "Bye - go do something productive.")
+            })
+            SmallTalkKind.COMPLIMENT -> pick("smalltalk_compliment.$tone", when (tone) {
+                KateTone.PROFESSIONAL -> listOf("Thank you, that's kind of you to say.")
+                KateTone.BALANCED -> listOf("Aww, thanks!")
+                KateTone.SASSY -> listOf("I mean, obviously. Glad you noticed.")
+            })
+        }
+    }
 }

@@ -89,6 +89,7 @@ class KateOverlayService : Service() {
     private lateinit var audioCapture: AudioCapture
     private lateinit var localSettings: LocalSettingsStore
     private lateinit var commandProcessor: KateCommandProcessor
+    private lateinit var responseGenerator: KateResponseGenerator
     private lateinit var sttEngine: KateSttEngine
 
     private lateinit var ttsEngine: KateTtsEngine
@@ -119,9 +120,10 @@ class KateOverlayService : Service() {
         ttsEngine = KateTtsEngine(this)
         serviceScope.launch { ttsEngine.initialize() }
 
+        responseGenerator = KateResponseGenerator()
         commandProcessor = KateCommandProcessor(
             context = this,
-            responseGenerator = KateResponseGenerator(),
+            responseGenerator = responseGenerator,
             deviceControl = DeviceControlManager(this),
             weatherService = WeatherService(),
             webSearchService = WebSearchService(),
@@ -172,6 +174,22 @@ class KateOverlayService : Service() {
 
         activeCycle = serviceScope.launch {
             setState(OverlayState.LISTENING)
+
+            // Instant spoken ack the moment she's triggered, before STT even
+            // starts - previously she went straight to silently listening
+            // with only a color-pulse cue, which read as unresponsive/dead
+            // rather than "ready". This is deliberately NOT awaited before
+            // starting capture below: MicArbiter.setCapturing(true) still
+            // happens immediately after, so the mic opens right away and
+            // isn't blocked on TTS finishing - the ack plays concurrently
+            // with the mic warming up.
+            val tone = toneFromSlider(localSettings.getToneLevel())
+            serviceScope.launch {
+                ttsEngine.speakAndAwait(
+                    responseGenerator.speechForListeningPrompt(tone, localSettings.getUserName())
+                )
+            }
+
             MicArbiter.setCapturing(true)
 
             val transcript = try {
@@ -187,7 +205,6 @@ class KateOverlayService : Service() {
             }
 
             setState(OverlayState.PROCESSING)
-            val tone = toneFromSlider(localSettings.getToneLevel())
             val result = commandProcessor.process(transcript, tone)
 
             setState(OverlayState.SPEAKING)

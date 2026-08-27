@@ -504,4 +504,118 @@ class DeviceControlManager(private val context: Context) {
             false
         }
     }
+
+    // ========================================================================
+    // 10. GLOBAL DEVICE ACTIONS (home / back / recents / lock / screenshot)
+    // ========================================================================
+    // All of these require the accessibility service to be running - there's
+    // no non-accessibility way to do a screen-independent "go home" or
+    // "lock the screen" from a regular app. If the user hasn't granted the
+    // accessibility permission yet, every one of these returns false rather
+    // than throwing, same failure shape as the rest of this class, so
+    // KateCommandProcessor can give a single consistent "I need accessibility
+    // permission for that" response (see speechForAccessibilityRequired).
+
+    private fun accessibilityServiceOrNull() = com.dti.kate.service.KateAccessibilityService.instance
+
+    fun goHome(): Boolean = accessibilityServiceOrNull()?.goHome() ?: run {
+        Log.w(TAG, "goHome failed - accessibility service not connected")
+        false
+    }
+
+    fun goBack(): Boolean = accessibilityServiceOrNull()?.goBack() ?: run {
+        Log.w(TAG, "goBack failed - accessibility service not connected")
+        false
+    }
+
+    fun showRecentApps(): Boolean = accessibilityServiceOrNull()?.showRecents() ?: run {
+        Log.w(TAG, "showRecentApps failed - accessibility service not connected")
+        false
+    }
+
+    /** Android 9+ (API 28) - the underlying performGlobalAction() call
+     * itself returns false below that, so no extra SDK_INT check needed. */
+    fun lockScreen(): Boolean = accessibilityServiceOrNull()?.lockScreen() ?: run {
+        Log.w(TAG, "lockScreen failed - accessibility service not connected")
+        false
+    }
+
+    /** Android 9+ (API 28), same as lockScreen(). Also needs
+     * canTakeScreenshot="true" in accessibility_config.xml (already set). */
+    fun takeScreenshot(): Boolean = accessibilityServiceOrNull()?.takeScreenshot() ?: run {
+        Log.w(TAG, "takeScreenshot failed - accessibility service not connected")
+        false
+    }
+
+    /** Whether the accessibility service is actually running right now -
+     * distinct from KateAccessibilityService.isEnabled(context), which only
+     * checks the system setting. A user can have it enabled in Settings but
+     * the service process not yet be connected (cold start race) - this
+     * checks the live instance, which is what actually matters for whether
+     * goHome() etc. will work this instant. */
+    fun isAccessibilityServiceRunning(): Boolean = accessibilityServiceOrNull() != null
+
+    // ========================================================================
+    // 11. TARGETED MESSAGING (WhatsApp / Messenger via accessibility)
+    // ========================================================================
+    /** See MessagingAppAutomator's doc comment for the reliability caveat -
+     * this is meaningfully more fragile than every other method in this
+     * class, since it drives a third-party app's UI rather than calling a
+     * stable Android API. Returns false (never throws) on any failure,
+     * same contract as the rest of this class, so KateCommandProcessor's
+     * SMS-fallback logic (see that file) can treat "app-targeted send
+     * failed" uniformly with every other failure case here. */
+    suspend fun sendViaMessagingApp(
+        app: com.dti.kate.core.MessagingApp,
+        contactName: String,
+        message: String,
+    ): Boolean = accessibilityServiceOrNull()?.sendViaMessagingApp(app, contactName, message) ?: run {
+        Log.w(TAG, "sendViaMessagingApp failed - accessibility service not connected")
+        false
+    }
+
+    // ========================================================================
+    // 12. IN-CALL VOICE ACTIONS (answer / decline)
+    // ========================================================================
+    // Answer uses TelecomManager.acceptRingingCall() - a real public API
+    // (API 28+) gated by ANSWER_PHONE_CALLS, so this is as solid as
+    // lockScreen()/takeScreenshot() above.
+    //
+    // Decline has NO equivalent public API - Android intentionally does
+    // not let a regular app end/reject a call unless it IS the active
+    // default dialer (a much bigger commitment: becoming the system dialer
+    // changes how every call on the device is handled, not something to
+    // take on for one voice command). The old ITelephony-internal-API
+    // reflection hack some tutorials use reaches into non-public APIs and
+    // is exactly the kind of thing Play review flags/rejects, so it's not
+    // used here. Decline is instead attempted via accessibility, finding
+    // and tapping the on-screen decline button - same fragility profile as
+    // MessagingAppAutomator (couples to the phone/dialer app's UI, which
+    // varies by OEM/dialer and can change between updates). If it fails,
+    // callers get an honest "couldn't do that" rather than a fake success.
+
+    fun answerCall(): Boolean {
+        return try {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.w(TAG, "answerCall failed - ANSWER_PHONE_CALLS not granted")
+                return false
+            }
+            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? android.telecom.TelecomManager
+                ?: return false
+            telecomManager.acceptRingingCall()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to answer call: ${e.message}")
+            false
+        }
+    }
+
+    /** See class doc above - this is accessibility-driven UI automation,
+     * not a stable platform API, because none exists for this action. */
+    fun declineCall(): Boolean = accessibilityServiceOrNull()?.declineCall() ?: run {
+        Log.w(TAG, "declineCall failed - accessibility service not connected")
+        false
+    }
 }

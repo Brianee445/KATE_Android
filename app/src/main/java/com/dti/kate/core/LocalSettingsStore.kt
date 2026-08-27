@@ -17,7 +17,17 @@ class LocalSettingsStore(context: Context) {
         private const val KEY_AUTOSTART_PROMPTED = "autostart_permission_prompted"
         private const val KEY_WAKE_WORD_ENABLED = "wake_word_enabled"
         private const val KEY_STT_MODE = "stt_mode"
+        private const val KEY_USER_NAME = "user_name"
     }
+
+    // Captured once during onboarding (see OnboardingScreen's name step) so
+    // Kate can greet the user by name and personalize small talk/jokes.
+    // Null (not empty string) distinguishes "never asked / skipped" from
+    // "asked and got nothing" - both are treated the same by callers today,
+    // but keeping null lets a future onboarding revision re-prompt only
+    // the "never asked" case if that distinction ever matters.
+    fun getUserName(): String? = prefs.getString(KEY_USER_NAME, null)?.takeIf { it.isNotBlank() }
+    fun setUserName(value: String) = prefs.edit().putString(KEY_USER_NAME, value.trim()).apply()
 
     fun getToneLevel(): Float = prefs.getFloat(KEY_TONE, 0.5f)
     fun setToneLevel(value: Float) = prefs.edit().putFloat(KEY_TONE, value).apply()

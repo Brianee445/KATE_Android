@@ -1,3 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  isShrinkResources=true (app/build.gradle.kts, release build type) strips
+  resources it believes are unreachable. Every test build this session has
+  gone through the release pipeline (android-release.yml), and the
+  launcher icon persistently rendered as Android's bare default
+  placeholder - surviving clean reinstalls, so not a caching issue, and
+  not present in any other icon usage in the app (only this manifest ->
+  mipmap -> adaptive-icon-XML -> drawable -> bitmap chain specifically).
+  That points at the resource shrinker mishandling this particular nested
+  reference chain, a known category of issue with adaptive icons - the
+  shrinker's static analysis doesn't always trace through XML-references-
+  XML-references-bitmap indirection as reliably as it traces direct code
+  references. tools:keep explicitly protects these regardless of what the
+  shrinker's own reachability analysis concludes.
+-->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@mipmap/ic_launcher,@mipmap/ic_launcher_round,@drawable/ic_launcher_foreground,@drawable/ic_launcher_background,@drawable/kate_avatar_source" />
+    tools:keep="@mipmap/ic_launcher,@mipmap/ic_launcher_round,@drawable/ic_launcher_foreground,@drawable/ic_launcher_background,@drawable/kate_avatar_source,@drawable/kate_avatar_idle" />

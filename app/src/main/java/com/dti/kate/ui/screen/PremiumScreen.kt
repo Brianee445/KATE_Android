@@ -92,7 +92,7 @@ fun PremiumScreen(
             period = "forever",
             features = listOf(
                 "50 cloud requests/month",
-                "Offline mode",
+                "Offline mode - coming soon",
                 "Basic wake triggers",
             ),
             popular = false,

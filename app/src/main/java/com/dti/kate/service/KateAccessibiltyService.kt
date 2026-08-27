@@ -113,4 +113,70 @@ class KateAccessibilityService : AccessibilityService() {
             false
         }
     }
+
+    // ========================================================================
+    // GLOBAL ACTIONS (home / back / recents / lock / screenshot)
+    // ========================================================================
+    // These use performGlobalAction(), which works regardless of which app
+    // is in the foreground - no target-app UI lookup needed, unlike
+    // typeText() above. That also means they can't fail the way typeText
+    // can ("no input field found") - performGlobalAction() itself returns
+    // a plain boolean for "did the system accept this action", which is
+    // what each wrapper below returns directly.
+
+    fun goHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
+
+    fun goBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
+
+    fun showRecents(): Boolean = performGlobalAction(GLOBAL_ACTION_RECENTS)
+
+    /** Android 9+ (API 28). On older devices performGlobalAction() itself
+     * returns false for this action code, so callers get an honest failure
+     * rather than a crash - no separate SDK_INT check needed here. */
+    fun lockScreen(): Boolean = performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+
+    /** Android 9+ (API 28), same story as lockScreen(). Also requires
+     * android:canTakeScreenshot="true" in accessibility_config.xml - see
+     * that file's comment. */
+    fun takeScreenshot(): Boolean = performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+
+    // ========================================================================
+    // TARGETED MESSAGING (WhatsApp / Messenger)
+    // ========================================================================
+    private val messagingAutomator by lazy { MessagingAppAutomator(this) }
+
+    suspend fun sendViaMessagingApp(
+        app: com.dti.kate.core.MessagingApp,
+        contactName: String,
+        message: String,
+    ): Boolean = messagingAutomator.send(app, contactName, message)
+
+    // ========================================================================
+    // DECLINE INCOMING CALL
+    // ========================================================================
+    // No stable resource ID works across dialers (AOSP Phone, Pixel Dialer,
+    // Samsung's own dialer all use different package names/IDs for this
+    // button), so this matches by content description/text instead, tried
+    // against several common labels. This is the least reliable action in
+    // the whole app - see DeviceControlManager.declineCall's doc comment
+    // for why there's no better option. A miss here (button not found)
+    // returns false rather than tapping something wrong.
+    fun declineCall(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val labels = listOf("Decline", "Reject", "Dismiss", "End call", "Hang up")
+        for (label in labels) {
+            val nodes = root.findAccessibilityNodeInfosByText(label)
+            val match = nodes.firstOrNull {
+                it.isClickable || it.parent?.isClickable == true
+            }
+            if (match != null) {
+                val target = if (match.isClickable) match else match.parent
+                target?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                Log.i(TAG, "Declined call via label: $label")
+                return true
+            }
+        }
+        Log.w(TAG, "declineCall: no matching button found on screen")
+        return false
+    }
 }

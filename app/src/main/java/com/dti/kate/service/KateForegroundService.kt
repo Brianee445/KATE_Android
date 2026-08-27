@@ -191,6 +191,52 @@ class KateForegroundService : Service() {
         }
     }
 
+    // Batch 5: announces incoming callers by name. Fires on the standard
+    // PHONE_STATE broadcast rather than TelephonyCallback/PhoneStateListener,
+    // since a plain registered BroadcastReceiver fits this service's
+    // existing pattern (see powerReceiver above) without needing a second
+    // listener lifecycle to manage. Caller name comes from ContactsHelper's
+    // existing number->name matching - no READ_CALL_LOG permission needed
+    // for this, since ContactsHelper already reads READ_CONTACTS-scoped
+    // data. An unknown number (not in contacts) announces the raw number
+    // instead of silently saying nothing, so the user still gets useful
+    // information.
+    private var lastAnnouncedNumber: String? = null
+
+    private val phoneStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != android.telephony.TelephonyManager.ACTION_PHONE_STATE_CHANGED) return
+            val state = intent.getStringExtra(android.telephony.TelephonyManager.EXTRA_STATE)
+            if (state != android.telephony.TelephonyManager.EXTRA_STATE_RINGING) {
+                if (state == android.telephony.TelephonyManager.EXTRA_STATE_IDLE) lastAnnouncedNumber = null
+                return
+            }
+
+            val incomingNumber = intent.getStringExtra(android.telephony.TelephonyManager.EXTRA_INCOMING_NUMBER)
+            if (incomingNumber.isNullOrBlank() || incomingNumber == lastAnnouncedNumber) return
+            lastAnnouncedNumber = incomingNumber
+
+            serviceScope.launch {
+                val tone = toneFromSlider(localSettings.getToneLevel())
+                val contactsHelper = com.dti.kate.core.ContactsHelper(applicationContext)
+                val callerName = if (contactsHelper.hasPermission()) {
+                    contactsHelper.getAllContacts()
+                        .firstOrNull { normalizePhoneNumber(it.phoneNumber) == normalizePhoneNumber(incomingNumber) }
+                        ?.name
+                } else null
+
+                val message = responseGenerator.speechForIncomingCall(callerName ?: incomingNumber, tone)
+                if (isTtsReady) speak(message) else pendingSpeech = message
+            }
+        }
+    }
+
+    /** Loose digits-only comparison - contact numbers and Caller ID numbers
+     * frequently differ in formatting (spaces, dashes, a leading country
+     * code) even when they're the same number, so an exact string match
+     * would miss legitimate matches constantly. */
+    private fun normalizePhoneNumber(number: String): String = number.filter { it.isDigit() }.takeLast(10)
+
     override fun onCreate() {
         super.onCreate()
         localSettings = LocalSettingsStore(this)
@@ -211,6 +257,15 @@ class KateForegroundService : Service() {
             addAction(Intent.ACTION_POWER_DISCONNECTED)
         }
         registerReceiver(powerReceiver, filter)
+
+        // READ_PHONE_STATE is already declared in the manifest. If the user
+        // hasn't granted it at runtime yet, Android denies delivery of this
+        // broadcast at the OS level (logged as a "Permission Denial"
+        // rather than a crash here) - confirmed via Android's own
+        // BroadcastQueue behavior, not assumed. So no extra try/catch is
+        // needed around this registration for the not-yet-granted case;
+        // the receiver just won't fire until the permission is granted.
+        registerReceiver(phoneStateReceiver, IntentFilter(android.telephony.TelephonyManager.ACTION_PHONE_STATE_CHANGED))
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -353,6 +408,7 @@ class KateForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(powerReceiver)
+        unregisterReceiver(phoneStateReceiver)
         sensorManager?.unregisterListener(sensorListener)
         ttsEngine.close()
 
