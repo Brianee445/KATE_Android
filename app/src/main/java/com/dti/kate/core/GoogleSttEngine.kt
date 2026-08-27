@@ -9,6 +9,7 @@ import android.speech.SpeechRecognizer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * "Kate Smart" mode - Google's speech recognition, via the class-based
@@ -29,7 +30,10 @@ import kotlinx.coroutines.withContext
  * Dispatchers.Main via createSpeechRecognizer's own threading + this
  * class's use of the main dispatcher for the listener registration.
  */
-class GoogleSttEngine(private val context: Context) {
+class GoogleSttEngine(
+    private val context: Context,
+    private val localSettings: LocalSettingsStore = LocalSettingsStore(context),
+) {
 
     /** True if Google's recognizer is present at all on this device - check before use, since "Kate Smart" should silently be unavailable rather than error-loop on devices without it. */
     fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
@@ -38,12 +42,22 @@ class GoogleSttEngine(private val context: Context) {
 
     /**
      * Listens once and returns the recognized text, or null on timeout/
-     * error/no speech. Times out via RecognizerIntent's own EXTRA_SPEECH_*
-     * silence-detection extras rather than an external timer, since the
-     * platform recognizer already does endpoint detection internally.
+     * error/no speech.
+     *
+     * Previously relied entirely on RecognizerIntent's own EXTRA_SPEECH_*
+     * silence-detection extras, left unset - which meant the platform's
+     * own (short, OEM-variable) default silence timeout governed cutoff,
+     * completely ignoring the user's configured listen duration in
+     * Settings. Now explicitly sets those extras from
+     * localSettings.getTimeoutSeconds(), and additionally wraps the whole
+     * listen in a matching withTimeoutOrNull as a hard ceiling, since the
+     * EXTRA_SPEECH_* extras are honored inconsistently across OEM
+     * recognizer implementations (Transsion in particular).
      */
     suspend fun listenOnce(): String? = withContext(Dispatchers.Main) {
         if (!isAvailable()) return@withContext null
+
+        val timeoutMs = (localSettings.getTimeoutSeconds().coerceAtLeast(1) * 1000L)
 
         val result = CompletableDeferred<String?>()
         val sr = SpeechRecognizer.createSpeechRecognizer(context)
@@ -70,6 +84,12 @@ class GoogleSttEngine(private val context: Context) {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            // Drive the recognizer's own silence detection off the user's
+            // configured duration rather than leaving it at the platform
+            // default, which is what was cutting the mic off early.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, timeoutMs)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, timeoutMs)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, timeoutMs)
             // EXTRA_PREFER_OFFLINE deliberately NOT set. Confirmed via
             // real-device testing (Transsion hardware) that it does not
             // gracefully fall through to network recognition when the
@@ -82,7 +102,11 @@ class GoogleSttEngine(private val context: Context) {
         }
         sr.startListening(intent)
 
-        val text = result.await()
+        // Hard ceiling on top of the extras above - some OEM recognizer
+        // implementations don't honor EXTRA_SPEECH_INPUT_* reliably, so
+        // this is what actually guarantees the configured duration is
+        // respected rather than just requested.
+        val text = withTimeoutOrNull(timeoutMs + 2000L) { result.await() }
         sr.destroy()
         recognizer = null
         text
