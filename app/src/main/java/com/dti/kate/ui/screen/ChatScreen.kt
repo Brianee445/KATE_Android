@@ -24,6 +24,7 @@ import com.dti.kate.core.*
 import com.dti.kate.utils.DeviceControlManager
 import com.dti.kate.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.launch
 import java.util.UUID
