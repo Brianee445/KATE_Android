@@ -27,6 +27,7 @@ import com.dti.kate.BuildConfig
 import com.dti.kate.core.DebugLog
 import com.dti.kate.core.LocalSettingsStore
 import com.dti.kate.repository.Repository
+import com.dti.kate.service.KateAccessibilityService
 import com.dti.kate.ui.components.*
 import com.dti.kate.ui.theme.*
 import kotlinx.coroutines.launch
@@ -344,6 +345,58 @@ fun SettingsScreen(
 
             item { ProfileCard(user = user) }
             item { TierCard(tier = user.tier, onUpgrade = { navController.navigate("premium") }) }
+
+            item { SettingsSectionHeader(title = "Permissions") }
+            item {
+                // Re-checked every recomposition (cheap Settings.Secure
+                // read), same reasoning as the entitlement gates above -
+                // status should update live once the user comes back from
+                // the system Accessibility screen without reopening this one.
+                val accessibilityEnabled = KateAccessibilityService.isEnabled(context)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { KateAccessibilityService.openAccessibilitySettings(context) },
+                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    shape = KateShape.MD,
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Accessibility access",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = if (accessibilityEnabled) "On" else "Off",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (accessibilityEnabled) LimeAccent else TextSecondary,
+                            )
+                        }
+                        Text(
+                            text = "Needed for typing, opening recents, locking the screen, " +
+                                "taking screenshots, and declining calls by voice.",
+                            style = MaterialTheme.typography.bodySmall, color = TextSecondary,
+                        )
+                        if (!accessibilityEnabled) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Tap to open Accessibility settings and turn Kate on. " +
+                                    "If the switch looks greyed out and won't turn on, open " +
+                                    "Android's Settings app -> Apps -> Kate -> tap the icon " +
+                                    "in the top-right corner -> \"Allow restricted settings\" " +
+                                    "first, then come back here.",
+                                style = MaterialTheme.typography.labelSmall, color = LimeAccent,
+                            )
+                        }
+                    }
+                }
+            }
 
             item { SettingsSectionHeader(title = "Wake Triggers") }
             items(settings.wakeTriggers) { trigger ->
