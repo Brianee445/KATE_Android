@@ -4,7 +4,7 @@
 [versions]
 # ==================== ANDROID ====================
 agp                = "8.7.2"
-kotlin             = "2.0.21"
+kotlin             = "2.2.10"
 core-ktx           = "1.15.0"
 activity-compose   = "1.9.3"
 lifecycle          = "2.8.7"
@@ -149,4 +149,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
-ksp = { id = "com.google.devtools.ksp", version = "2.0.21-1.0.27" }
+ksp = { id = "com.google.devtools.ksp", version = "2.2.10-2.0.2" }
