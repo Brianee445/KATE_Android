@@ -14,7 +14,8 @@ enum class SubscriptionTier(val id: String) {
     fun atLeast(minimum: SubscriptionTier): Boolean = this.ordinal >= minimum.ordinal
 
     companion object {
-        fun fromId(id: String): SubscriptionTier = entries.find { it.id == id } ?: FREE
+        fun fromId(id: String): SubscriptionTier =
+            entries.find { it.id.equals(id.trim(), ignoreCase = true) } ?: FREE
     }
 }
 
