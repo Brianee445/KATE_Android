@@ -186,7 +186,8 @@ class KateOverlayService : Service() {
             val tone = toneFromSlider(localSettings.getToneLevel())
             serviceScope.launch {
                 ttsEngine.speakAndAwait(
-                    responseGenerator.speechForListeningPrompt(tone, localSettings.getUserName())
+                    responseGenerator.speechForListeningPrompt(tone, localSettings.getUserName()),
+                    tone
                 )
             }
 
@@ -215,7 +216,7 @@ class KateOverlayService : Service() {
             if (result.action is KateAction.TypeText) {
                 showTypedTextBriefly(result.action.text)
             }
-            speakAndAwait(result.speech)
+            speakAndAwait(result.speech, tone)
 
             setState(OverlayState.IDLE)
             scheduleAutoCollapse()
@@ -224,7 +225,7 @@ class KateOverlayService : Service() {
 
     private suspend fun listenForTranscript(): String? = sttEngine.listen(serviceScope)
 
-    private suspend fun speakAndAwait(text: String) = ttsEngine.speakAndAwait(text)
+    private suspend fun speakAndAwait(text: String, tone: KateTone? = null) = ttsEngine.speakAndAwait(text, tone)
 
     // ------------------------------------------------------------------
     // Visual state - ring pulse + avatar tint, no text
