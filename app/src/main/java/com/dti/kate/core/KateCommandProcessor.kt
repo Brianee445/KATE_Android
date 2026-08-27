@@ -82,7 +82,8 @@ class KateCommandProcessor(
             is KateAction.TypeText -> {
                 if (!KateAccessibilityService.isEnabled(context)) {
                     KateAccessibilityService.openAccessibilitySettings(context)
-                    "I need accessibility access to type for you - please turn it on for Kate."
+                    "I need accessibility access to type for you. If the toggle looks greyed out, " +
+                        "check the Permissions section in Kate's own Settings for how to unlock it."
                 } else {
                     val typed = KateAccessibilityService.instance?.typeText(action.text) ?: false
                     if (typed) "Typed it." else "I couldn't find a text field to type into."
