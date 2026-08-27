@@ -87,6 +87,7 @@ jobs:
           # in the zip - this only ever adds/overwrites, never removes,
           # so it's safe to run even if the zip is a partial update.
           rsync -a "$SRC_DIR"/ "$GITHUB_WORKSPACE"/ --exclude='.git'
+          rsync -a "$SRC_DIR"/ "$GITHUB_WORKSPACE"/ --exclude='.git' --exclude='.github'
 
       - name: Remove the zip from the repo
         run: |
