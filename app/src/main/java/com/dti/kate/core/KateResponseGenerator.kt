@@ -103,10 +103,17 @@ class KateResponseGenerator {
 
             // ---- Time - before Weather so "what time" doesn't get caught
             // by an unrelated word overlap, and before WebSearch's "what "
-            // catch-all.
-            (lower.contains("what time is it") || lower.contains("what's the time") ||
-                lower.contains("whats the time") || lower.contains("current time") ||
-                lower == "time") ->
+            // catch-all. Matches "time" alongside a question opener rather
+            // than a fixed set of exact phrases, since "what is the time"
+            // (word order swapped from "what time is it") was previously
+            // falling through to WebSearch entirely unmatched.
+            (lower == "time" || lower.contains("current time") ||
+                (lower.contains("time") &&
+                    (lower.startsWith("what") || lower.startsWith("whats") ||
+                        lower.startsWith("what's") || lower.contains("tell me") ||
+                        lower.contains("do you know") || lower.contains("got the time")) &&
+                    !lower.contains("alarm") && !lower.contains("timer") &&
+                    !lower.contains("timezone") && !lower.contains("time zone"))) ->
                 KateAction.CurrentTime
 
             // ---- Alarm - "set an alarm", "wake me up at 7", "alarm for 7am"
@@ -293,8 +300,10 @@ class KateResponseGenerator {
     // or "chill", which real transcripts do produce.
 
     private val GREETING_WORDS = setOf(
-        "hi", "hello", "hey", "yo", "hiya", "sup", "what's up", "whats up",
-        "good morning", "good afternoon", "good evening",
+        "hi", "hello", "hey", "yo", "hiya", "howdy", "sup", "what's up", "whats up",
+        "what's good", "whats good", "hey there", "hi there", "hello there",
+        "good morning", "good afternoon", "good evening", "good day", "morning", "evening",
+        "greetings", "yo yo",
     )
 
     private fun isGreeting(lower: String): Boolean =
