@@ -7,9 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** How many turns of context the classifier gets to resolve references like
- * "what about tomorrow" or "tell him I said hi" against. Kept small - this
- * is short-term working memory, not a transcript search. */
-private const val CONTEXT_WINDOW = 6
+ * "what about tomorrow" or "tell him I said hi" against. Kept well below
+ * MAX_STORED_TURNS - this is short-term working memory, not a transcript
+ * search - but wide enough that a normal back-and-forth conversation
+ * (several greetings/follow-ups in a row) doesn't fall out of context
+ * mid-exchange, which is what happened at the previous value of 6. */
+private const val CONTEXT_WINDOW = 20
 
 /** Row cap enforced after every insert. Generous relative to CONTEXT_WINDOW
  * so re-opening the app soon after still has a bit of history, without the
