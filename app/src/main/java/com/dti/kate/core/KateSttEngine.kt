@@ -67,11 +67,15 @@ class KateSttEngine(
 
         // Hard ceiling regardless of silence detection, so a false "still
         // speaking" read (e.g. sustained background noise just above
-        // threshold) can't hang Kate Pro's capture indefinitely.
-        private const val MAX_RAW_CAPTURE_MS = 12000L
+        // threshold) can't hang Kate Pro's capture indefinitely. Was
+        // fixed at 12s regardless of the user's configured listen
+        // duration in Settings - now derived from that instead, so
+        // Classic and Pro modes agree on how long Kate should listen.
+        private fun maxRawCaptureMs(localSettings: LocalSettingsStore): Long =
+            localSettings.getTimeoutSeconds().coerceAtLeast(1) * 1000L
     }
 
-    private val googleStt = GoogleSttEngine(context)
+    private val googleStt = GoogleSttEngine(context, localSettings)
 
     suspend fun listen(scope: CoroutineScope): String? {
         val mode = localSettings.getSttMode()
@@ -147,7 +151,7 @@ class KateSttEngine(
         var silenceMs = 0L
 
         val maxJob = scope.launch {
-            delay(MAX_RAW_CAPTURE_MS)
+            delay(maxRawCaptureMs(localSettings))
             if (!done.isCompleted) done.complete(Unit)
         }
 
