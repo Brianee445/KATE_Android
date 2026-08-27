@@ -159,6 +159,12 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation)
     kapt(libs.hilt.compiler)
+    // Hilt 2.57+ unshaded kotlin-metadata-jvm from its compiler, but the
+    // version it pulls in by default doesn't understand Kotlin 2.2.x's
+    // metadata format yet. Forcing the matching version here avoids the
+    // "Provided Metadata instance has version 2.2.0" kapt failure -
+    // see google/dagger#4779.
+    kapt("org.jetbrains.kotlin:kotlin-metadata-jvm:2.2.10")
 
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.core)
