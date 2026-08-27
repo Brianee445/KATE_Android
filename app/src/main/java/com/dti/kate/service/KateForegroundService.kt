@@ -424,14 +424,8 @@ class KateForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun speak(text: String) {
-        // NOTE: the previous per-utterance speech-rate tweak by tone
-        // (platform TextToSpeech.setSpeechRate) doesn't have an equivalent
-        // in KateTtsEngine's unified API yet, since Piper's speed knob
-        // (length_scale) lives in the voice config rather than being an
-        // easy per-call parameter. Dropped for now rather than special-
-        // cased per engine - worth adding back to KateTtsEngine if the
-        // tone-based rate change turns out to matter in practice.
-        serviceScope.launch { ttsEngine.speakAndAwait(text) }
+        val tone = toneFromSlider(localSettings.getToneLevel())
+        serviceScope.launch { ttsEngine.speakAndAwait(text, tone) }
     }
 
     private fun createNotificationChannel() {
