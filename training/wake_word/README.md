@@ -4,7 +4,7 @@ Trains the on-device model behind Kate's wake phrases — "Hey Kate", "Hi
 Kate", "Hello Kate", "What's up Kate" — treated as a single binary "wake vs.
 not" classifier (`com.dti.kate.wakeword.WakeWordDetector`). Runs in Google
 Colab - no local GPU needed.
- 
+
 ## Why this exists
 
 Android gives no way to keep a full speech-to-text model (Vosk) running
