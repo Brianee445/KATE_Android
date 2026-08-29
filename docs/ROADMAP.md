@@ -111,7 +111,7 @@ Extends `KateAccessibilityService`. No manifest change for most of these.
       just an in-app doc
 
 ---
-
+ 
 ## Explicitly out of scope for now
 - No LLM integration (no budget) — intelligence stays rule/intent-based
 - No passive/background journaling or stress/lie-detection features
