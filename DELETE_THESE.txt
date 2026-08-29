@@ -5,7 +5,7 @@ since they no longer exist - delete them manually or via git rm):
   app/src/main/java/com/dti/kate/core/NativeBridge.kt
   app/src/main/cpp/                          (entire directory)
   scripts/download_third_party.sh
-
+ 
 Everything else in this zip is a MODIFIED file - overwrite in place
 at the same path.
 
