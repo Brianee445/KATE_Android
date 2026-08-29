@@ -290,6 +290,10 @@ fun SettingsScreen(
                     showClearConfirm = false
                 }) { Text("Clear", color = Error) }
             },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") }
+            },
+        )
     }
 
     if (showAdminPasscodeDialog) {
