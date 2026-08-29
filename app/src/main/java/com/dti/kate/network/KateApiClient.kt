@@ -220,9 +220,18 @@ class KateApiClient(private val context: Context) {
             }
             response
         }
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        // 25s, not OkHttp's usual much-longer default: a cold Render
+        // backend (free-tier spin-down after idle) can otherwise hang a
+        // request for the better part of a minute with nothing capping it
+        // externally - too long for a voice UX where the user is actively
+        // waiting. Kept above transcribe's own 20s CLOUD_TIMEOUT_MS ceiling
+        // so that path's behavior is unaffected; search has its own
+        // tighter 10s ceiling on top of this in AgentSearchService, for
+        // the same reasoning applied more aggressively where nothing about
+        // the interaction benefits from waiting longer.
+        .connectTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(25, TimeUnit.SECONDS)
+        .writeTimeout(25, TimeUnit.SECONDS)
         .build()
     
     private val retrofit = Retrofit.Builder()

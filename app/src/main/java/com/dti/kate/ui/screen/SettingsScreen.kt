@@ -249,6 +249,7 @@ class SettingsViewModel(private val context: Context) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SettingsScreen(
     navController: NavController,
@@ -270,6 +271,9 @@ fun SettingsScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var showClearConfirm by remember { mutableStateOf(false) }
+    var showAdminPasscodeDialog by remember { mutableStateOf(false) }
+    var adminPasscodeError by remember { mutableStateOf<String?>(null) }
+    var isAdminUnlocked by remember { mutableStateOf(SecurePreferences(context).isAdmin()) }
 
     LaunchedEffect(Unit) {
         viewModel.loadProfile()
@@ -286,8 +290,57 @@ fun SettingsScreen(
                     showClearConfirm = false
                 }) { Text("Clear", color = Error) }
             },
+    }
+
+    if (showAdminPasscodeDialog) {
+        var passcodeInput by remember { mutableStateOf("") }
+        var isVerifying by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { if (!isVerifying) { showAdminPasscodeDialog = false; adminPasscodeError = null } },
+            title = { Text("Admin Access") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = passcodeInput,
+                        onValueChange = { passcodeInput = it; adminPasscodeError = null },
+                        label = { Text("Passcode") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        enabled = !isVerifying,
+                    )
+                    adminPasscodeError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = it, color = Error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = passcodeInput.isNotBlank() && !isVerifying,
+                    onClick = {
+                        isVerifying = true
+                        coroutineScope.launch {
+                            com.dti.kate.repository.Repository(context).verifyAdmin(passcodeInput).fold(
+                                onSuccess = { response ->
+                                    isVerifying = false
+                                    if (response.valid) {
+                                        isAdminUnlocked = true
+                                        showAdminPasscodeDialog = false
+                                    } else {
+                                        adminPasscodeError = response.message
+                                    }
+                                },
+                                onFailure = { error ->
+                                    isVerifying = false
+                                    adminPasscodeError = error.message ?: "Verification failed"
+                                },
+                            )
+                        }
+                    },
+                ) { Text(if (isVerifying) "Checking..." else "Submit") }
+            },
             dismissButton = {
-                TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") }
+                TextButton(onClick = { showAdminPasscodeDialog = false; adminPasscodeError = null }, enabled = !isVerifying) { Text("Cancel") }
             },
         )
     }
@@ -639,7 +692,7 @@ fun SettingsScreen(
 
             item { SettingsSectionHeader(title = "About") }
             item {
-                if (SecurePreferences(context).isAdmin()) {
+                if (isAdminUnlocked) {
                     SettingsButtonItem(
                         title = "Admin Dashboard",
                         description = "Users, revenue, and error stats",
@@ -654,7 +707,21 @@ fun SettingsScreen(
                     shape = KateShape.MD,
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "Kate Assistant v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                        Text(
+                            text = "Kate Assistant v${BuildConfig.VERSION_NAME}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextPrimary,
+                            // Long-press is the "hidden gesture" the backend's
+                            // /admin/verify endpoint was built expecting (see
+                            // its own doc comment) - previously nothing in the
+                            // app ever called it, so no passcode could ever be
+                            // entered and isAdmin() could never become true no
+                            // matter what was set in the database.
+                            modifier = Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClick = { showAdminPasscodeDialog = true },
+                            ),
+                        )
                         Text(text = "A D.T.I Company", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
