@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="16dp">
 
@@ -39,11 +39,14 @@
             android:contentDescription="Close" />
     </LinearLayout>
 
-    <!-- Conversation area -->
-    <FrameLayout
+    <!-- Conversation/result area - wrap_content so the panel sizes to
+         whatever text it's given; KateOverlayService caps this at a max
+         height and lets it scroll beyond that, so a long search answer
+         doesn't grow the box off-screen. -->
+    <ScrollView
+        android:id="@+id/overlay_transcript_scroll"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:layout_marginVertical="12dp"
         android:background="#252030"
         android:padding="12dp">
@@ -55,7 +58,7 @@
             android:text="Say something..."
             android:textColor="#A79AB8"
             android:textSize="14sp" />
-    </FrameLayout>
+    </ScrollView>
 
     <!-- Quick actions -->
     <LinearLayout

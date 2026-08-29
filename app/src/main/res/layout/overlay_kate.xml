@@ -5,27 +5,30 @@
 
     <!-- State ring - pulses/tints per KateOverlayService.setState(). Sized
          larger than the bubble beneath it so it reads as a ring around the
-         avatar, not a border on it. Starts invisible (idle = no pulse). -->
+         avatar, not a border on it. Starts invisible (idle = no pulse).
+         Only this ring changes color per state - the avatar itself is
+         never tinted (see setState), so Kate's own icon/art always reads
+         the same regardless of state. -->
     <View
         android:id="@+id/state_ring"
-        android:layout_width="88dp"
-        android:layout_height="88dp"
+        android:layout_width="104dp"
+        android:layout_height="104dp"
         android:layout_gravity="center"
         android:background="@drawable/overlay_state_ring" />
 
     <!-- Bubble View -->
     <FrameLayout
         android:id="@+id/overlay_bubble"
-        android:layout_width="64dp"
-        android:layout_height="64dp"
+        android:layout_width="76dp"
+        android:layout_height="76dp"
         android:layout_gravity="center"
         android:background="@drawable/overlay_bubble_background"
         android:elevation="8dp">
 
         <ImageView
             android:id="@+id/kate_avatar"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:layout_gravity="center"
             android:background="@drawable/circle_clip_mask"
             android:clipToOutline="true"
@@ -34,19 +37,27 @@
 
         <View
             android:id="@+id/listening_indicator"
-            android:layout_width="12dp"
-            android:layout_height="12dp"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
             android:layout_gravity="bottom|end"
             android:background="@drawable/overlay_indicator_dot"
             android:visibility="gone" />
 
     </FrameLayout>
 
-    <!-- Expanded View -->
+    <!-- Expanded/result View - shown automatically for TellJoke, Calculate,
+         and WebSearch results (see showResultText), and still for explicit
+         TypeText dictation. height is wrap_content so it sizes to whatever
+         content it's given rather than always reserving a fixed 400dp -
+         a one-line joke gets a small box, a longer search answer gets a
+         taller one. See overlay_transcript_scroll in
+         overlay_expanded_content.xml for the actual max-height/scroll cap,
+         since ScrollView has no XML maxHeight attribute. -->
     <FrameLayout
         android:id="@+id/overlay_expanded"
         android:layout_width="320dp"
-        android:layout_height="400dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
         android:background="@drawable/overlay_expanded_background"
         android:elevation="12dp"
         android:visibility="gone">

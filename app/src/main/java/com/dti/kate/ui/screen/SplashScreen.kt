@@ -23,15 +23,16 @@ import com.dti.kate.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class SplashViewModel {
-    fun checkAuth(): Boolean = false // Replace with real auth check
+class SplashViewModel(private val repository: com.dti.kate.repository.Repository) {
+    fun checkAuth(): Boolean = repository.isAuthenticated()
 }
 
 @Composable
 fun SplashScreen(
     navController: NavController,
-    viewModel: SplashViewModel = SplashViewModel(),
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val viewModel = remember { SplashViewModel(com.dti.kate.repository.Repository(context.applicationContext)) }
     val coroutineScope = rememberCoroutineScope()
     var logoScale by remember { mutableStateOf(0.5f) }
     var logoAlpha by remember { mutableStateOf(0f) }
@@ -53,7 +54,8 @@ fun SplashScreen(
         delay(400)
 
         if (isLoggedIn) {
-            navController.navigate("home") { popUpTo("splash") { inclusive = true } }
+            val destination = if (com.dti.kate.core.LocalSettingsStore(context).hasAgreedToTerms()) "home" else "user_agreement"
+            navController.navigate(destination) { popUpTo("splash") { inclusive = true } }
         } else {
             navController.navigate("onboarding") { popUpTo("splash") { inclusive = true } }
         }

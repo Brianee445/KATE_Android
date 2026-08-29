@@ -55,12 +55,9 @@ fun LoginScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Image(
-            painter = painterResource(R.drawable.kate_avatar_idle),
-            contentDescription = "Kate Assistant",
-            modifier = Modifier
-                .size(80.dp)
-                .padding(bottom = 16.dp),
+        com.dti.kate.ui.components.KateAvatar(
+            size = 80.dp,
+            modifier = Modifier.padding(bottom = 16.dp),
         )
 
         Text(
@@ -163,7 +160,8 @@ fun LoginScreen(
                                 }
                             }
 
-                            navController.navigate("home") {
+                            val destination = if (com.dti.kate.core.LocalSettingsStore(context).hasAgreedToTerms()) "home" else "user_agreement"
+                            navController.navigate(destination) {
                                 popUpTo("login") { inclusive = true }
                             }
                         } else {
@@ -188,49 +186,6 @@ fun LoginScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(1.dp)
-                    .background(Divider)
-            )
-            Text(
-                text = "OR",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(1.dp)
-                    .background(Divider)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        KateButton(
-            text = "Continue with Google",
-            onClick = { viewModel.loginWithGoogle() },
-            modifier = Modifier.fillMaxWidth(),
-            type = KateButtonType.Secondary,
-            size = KateButtonSize.Large,
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_google),
-                    contentDescription = "Google",
-                    modifier = Modifier.size(20.dp),
-                )
-            },
-        )
 
         Spacer(modifier = Modifier.height(16.dp))
 

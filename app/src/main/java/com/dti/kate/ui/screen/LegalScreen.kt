@@ -20,27 +20,27 @@ fun PrivacyPolicyScreen(navController: NavController) {
     LegalScreenScaffold(navController = navController, title = "Privacy Policy") {
         LegalSection(
             heading = "What we collect",
-            body = "When you create an account, we store your email address, full name (if provided), and a securely hashed version of your password - we never store your password in plain text. We also store your conversations with Kate and basic usage statistics (how many requests you've made) to operate your account and the free/paid tiers."
+            body = "When you create an account, we store your email address, your name (if you give it to us), and a securely scrambled version of your password - we never store your actual password. We also store your conversations with Kate, any reminders you ask her to set (the text and time, so she can remind you), and basic usage numbers (like how many requests you've made) so we can run your account and the free and paid plans."
         )
         LegalSection(
             heading = "Device permissions",
-            body = "Kate uses your microphone only while actively listening for a command, your device's motion sensors to detect the Raise-to-Wake and Shake gestures (processed entirely on-device, never uploaded), and approximate location only when you ask a weather-related question."
+            body = "Kate uses your microphone only while she's actively listening for something you say. She uses your device's motion sensors to notice the Raise-to-Wake and Shake gestures - this happens entirely on your device and is never sent anywhere. She uses your approximate location only when you ask about the weather. If you turn on Accessibility access, she uses it to do things like type text, open apps, or lock your screen when you ask her to."
+        )
+        LegalSection(
+            heading = "How your speech is turned into text",
+            body = "By default, Kate uses your device's own built-in speech engine to understand what you say - your conversation stays on your device and is never sent anywhere for this. If you're using Kate Pro, your speech may instead be sent to a secure third-party service so Kate can understand you more accurately."
         )
         LegalSection(
             heading = "Third-party services",
-            body = "Weather lookups use Open-Meteo. Web search answers use DuckDuckGo's Instant Answer API, with Wikipedia's summary API as a fallback when DuckDuckGo has no answer. Jokes are fetched from JokeAPI. None of these services receive your account identity - only the text of your query. Math/calculation requests are handled entirely on-device and never sent anywhere."
-        )
-        LegalSection(
-            heading = "Offline mode",
-            body = "Kate is not fully offline-capable yet - speech recognition currently requires an internet connection. A true offline mode is planned; this policy will be updated when it ships. Stay tuned."
+            body = "Kate relies on trusted third-party services for a few things: answering general search and knowledge questions, looking up the weather, and telling jokes. Kate Pro also uses a third-party service for more accurate speech processing, as explained above. When any of these are used, only the text of your question (or your general area, for weather) is shared - never your name, email, or account details. Math and calculations are always worked out directly on your device and never leave it."
         )
         LegalSection(
             heading = "Data sharing",
-            body = "We do not sell your data to anyone. Conversation data is used only to operate and improve Kate's responses, and you can disable this sharing at any time from Settings > Sync Training Data."
+            body = "We do not sell your data to anyone, ever. Your conversation data is only used to run Kate and improve how she responds, and you can turn this off at any time from Settings."
         )
         LegalSection(
             heading = "Your controls",
-            body = "You can clear locally cached data, export your conversation history, or delete your account entirely from the Settings screen."
+            body = "You can clear locally stored data, export your conversation history, remove individual reminders, or delete your account entirely, all from the Settings screen."
         )
     }
 }
@@ -50,23 +50,23 @@ fun TermsOfServiceScreen(navController: NavController) {
     LegalScreenScaffold(navController = navController, title = "Terms of Service") {
         LegalSection(
             heading = "Using Kate",
-            body = "Kate is provided as-is, without warranty of any kind. Kate is an assistant that can control certain device features (torch, Wi-Fi, Bluetooth, volume, calling) on your instruction - you are responsible for the commands you give it."
+            body = "Kate is provided as-is, without any guarantees. Kate can control certain features on your device - like your flashlight, Wi-Fi, Bluetooth, volume, and phone calls - when you ask her to. You're responsible for the instructions you give her."
         )
         LegalSection(
-            heading = "Accounts",
-            body = "You're responsible for keeping your account credentials secure. You may delete your account at any time from Settings."
+            heading = "Your account",
+            body = "You're responsible for keeping your account details safe. You can delete your account at any time from Settings."
         )
         LegalSection(
             heading = "Subscriptions",
-            body = "Premium tiers are billed through Google Play or, outside the Play Store, through Flutterwave. Subscriptions can be cancelled at any time and will remain active until the end of the current billing period."
+            body = "Premium plans are billed through Google Play or, outside the Play Store, through Flutterwave. You can cancel a subscription at any time, and it will stay active until the end of the period you've already paid for."
         )
         LegalSection(
             heading = "Acceptable use",
-            body = "You agree not to use Kate for any unlawful purpose, including using its calling or messaging features to harass others."
+            body = "You agree not to use Kate for anything unlawful, including using her calling or messaging features to harass other people."
         )
         LegalSection(
             heading = "Changes",
-            body = "We may update these terms as Kate's features evolve. Continued use of the app after changes constitutes acceptance of the updated terms."
+            body = "We may update these terms as Kate's features change over time. Continuing to use the app after we make changes means you accept the updated terms."
         )
     }
 }

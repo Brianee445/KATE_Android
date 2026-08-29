@@ -51,6 +51,7 @@ class KateCommandProcessor(
     private val jokeService: JokeService = JokeService(),
     private val settings: LocalSettingsStore = LocalSettingsStore(context),
     private val wikipediaService: WikipediaService = WikipediaService(),
+    private val agentSearchService: AgentSearchService = AgentSearchService(context),
     private val entitlements: com.dti.kate.billing.EntitlementStore = com.dti.kate.billing.EntitlementStore(context),
 ) {
     interface PermissionBridge {
@@ -84,6 +85,8 @@ class KateCommandProcessor(
                     KateAccessibilityService.openAccessibilitySettings(context)
                     "I need accessibility access to type for you. If the toggle looks greyed out, " +
                         "check the Permissions section in Kate's own Settings for how to unlock it."
+                } else if (accessibilityNeedsReconnect()) {
+                    responseGenerator.speechForAccessibilityReconnectNeeded(tone)
                 } else {
                     val typed = KateAccessibilityService.instance?.typeText(action.text) ?: false
                     if (typed) "Typed it." else "I couldn't find a text field to type into."
@@ -178,13 +181,18 @@ class KateCommandProcessor(
                 }
             }
             is KateAction.WebSearch -> {
-                // DuckDuckGo first (fast, good for definitions/facts), then
-                // Wikipedia summary as a fallback for the many topics DDG's
-                // instant-answer API just doesn't cover (see WikipediaService
-                // doc comment) - only then do we admit defeat and offer a
-                // browser search, same as before.
+                // DuckDuckGo first (fast, free, keyless - good for
+                // definitions/facts), then Wikipedia summary (also free -
+                // covers named entities DDG misses), then the LLM-routed
+                // backend endpoint as a last resort for everything else -
+                // general knowledge, grammar questions, current officeholders,
+                // anything without a clean instant-answer or article match.
+                // Only this last step costs an API call, and the backend
+                // caches by query so repeats are free too - only then do we
+                // admit defeat and offer a browser search, same as before.
                 val answer = webSearchService.getInstantAnswer(action.query)
                     ?: wikipediaService.getSummary(action.query)
+                    ?: agentSearchService.ask(action.query)
                 if (answer != null) responseGenerator.speechForSearchAnswer(answer, tone)
                 else responseGenerator.speechForSearchNoAnswer(tone)
             }
@@ -216,6 +224,19 @@ class KateCommandProcessor(
             }
             KateAction.WhoMadeYou -> responseGenerator.speechForWhoMadeYou(tone)
             KateAction.WhoAreYou -> responseGenerator.speechForWhoAreYou(tone, settings.getUserName())
+            is KateAction.SetReminder -> {
+                val dao = com.dti.kate.data.db.KateDatabase.getInstance(context).reminderDao()
+                val id = dao.insert(
+                    com.dti.kate.data.db.Reminder(
+                        text = action.text,
+                        triggerAtMillis = action.triggerAtMillis,
+                        createdAtMillis = System.currentTimeMillis(),
+                    )
+                )
+                ReminderScheduler.schedule(context, id, action.text, action.triggerAtMillis)
+                responseGenerator.speechForReminderSet(action.text, action.triggerAtMillis, tone)
+            }
+            KateAction.ReminderTimeUnclear -> responseGenerator.speechForReminderTimeUnclear(tone)
             is KateAction.Calculate -> {
                 val result = MathEvaluator.evaluate(action.expression)
                 if (result != null) responseGenerator.speechForCalculationResult(action.expression, result, tone)
@@ -238,11 +259,21 @@ class KateCommandProcessor(
                 responseGenerator.speechForSmallTalk(action.kind, tone, settings.getUserName())
 
             // ---- Batch 3 additions ----
-            KateAction.GoHome -> responseGenerator.speechForGoHome(deviceControl.goHome(), tone)
-            KateAction.GoBack -> responseGenerator.speechForGoBack(deviceControl.goBack(), tone)
-            KateAction.ShowRecents -> responseGenerator.speechForShowRecents(deviceControl.showRecentApps(), tone)
-            KateAction.LockScreen -> responseGenerator.speechForLockScreen(deviceControl.lockScreen(), tone)
-            KateAction.TakeScreenshot -> responseGenerator.speechForScreenshot(deviceControl.takeScreenshot(), tone)
+            KateAction.GoHome ->
+                if (accessibilityNeedsReconnect()) responseGenerator.speechForAccessibilityReconnectNeeded(tone)
+                else responseGenerator.speechForGoHome(deviceControl.goHome(), tone)
+            KateAction.GoBack ->
+                if (accessibilityNeedsReconnect()) responseGenerator.speechForAccessibilityReconnectNeeded(tone)
+                else responseGenerator.speechForGoBack(deviceControl.goBack(), tone)
+            KateAction.ShowRecents ->
+                if (accessibilityNeedsReconnect()) responseGenerator.speechForAccessibilityReconnectNeeded(tone)
+                else responseGenerator.speechForShowRecents(deviceControl.showRecentApps(), tone)
+            KateAction.LockScreen ->
+                if (accessibilityNeedsReconnect()) responseGenerator.speechForAccessibilityReconnectNeeded(tone)
+                else responseGenerator.speechForLockScreen(deviceControl.lockScreen(), tone)
+            KateAction.TakeScreenshot ->
+                if (accessibilityNeedsReconnect()) responseGenerator.speechForAccessibilityReconnectNeeded(tone)
+                else responseGenerator.speechForScreenshot(deviceControl.takeScreenshot(), tone)
 
             // ---- Batch 5 additions ----
             KateAction.AnswerCall -> {
@@ -267,6 +298,15 @@ class KateCommandProcessor(
      * comment for why this stays a simple string rather than reusing
      * KateAction itself (which isn't Room-storable without a type converter
      * we don't otherwise need yet). */
+    /** True only in the "malfunctioning" state reported by users - the
+     * permission IS granted (isEnabled), but the live service connection
+     * dropped (see DeviceControlManager.isAccessibilityServiceRunning()
+     * doc comment). Callers should check this before attempting a global
+     * action so the failure message accurately says "reconnect" rather
+     * than "turn on a permission that's already on". */
+    private fun accessibilityNeedsReconnect(): Boolean =
+        KateAccessibilityService.isEnabled(context) && !deviceControl.isAccessibilityServiceRunning()
+
     private fun topicLabel(action: KateAction): String = when (action) {
         is KateAction.OpenApp -> "open_app"
         is KateAction.PlayMusic -> "music"
@@ -281,6 +321,7 @@ class KateCommandProcessor(
         is KateAction.WebSearch -> "search"
         KateAction.CurrentTime -> "time"
         KateAction.SetAlarm -> "alarm"
+        is KateAction.SetReminder, KateAction.ReminderTimeUnclear -> "reminder"
         KateAction.WhoMadeYou, KateAction.WhoAreYou -> "identity"
         is KateAction.Calculate -> "math"
         KateAction.TellJoke -> "joke"

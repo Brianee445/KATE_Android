@@ -12,10 +12,11 @@ import androidx.room.RoomDatabase
  * and voice path all share one connection instead of racing to open the
  * same file.
  */
-@Database(entities = [ConversationTurn::class], version = 1, exportSchema = true)
+@Database(entities = [ConversationTurn::class, Reminder::class], version = 2, exportSchema = true)
 abstract class KateDatabase : RoomDatabase() {
 
     abstract fun conversationDao(): ConversationDao
+    abstract fun reminderDao(): ReminderDao
 
     companion object {
         @Volatile
@@ -27,7 +28,14 @@ abstract class KateDatabase : RoomDatabase() {
                     context.applicationContext,
                     KateDatabase::class.java,
                     "kate_local.db",
-                ).build().also { instance = it }
+                )
+                    // No prior release has shipped with a "reminders" table,
+                    // and conversation_turns is disposable short-term memory
+                    // (see its own doc comment) - a destructive migration
+                    // here just re-creates that one table empty, it doesn't
+                    // lose anything the user would consider real data.
+                    .fallbackToDestructiveMigration()
+                    .build().also { instance = it }
             }
     }
 }

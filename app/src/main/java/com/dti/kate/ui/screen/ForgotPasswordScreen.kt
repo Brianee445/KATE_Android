@@ -56,12 +56,9 @@ fun ForgotPasswordScreen(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        Image(
-            painter = painterResource(R.drawable.kate_avatar_idle),
-            contentDescription = "Reset Password",
-            modifier = Modifier
-                .size(80.dp)
-                .padding(bottom = 24.dp),
+        com.dti.kate.ui.components.KateAvatar(
+            size = 80.dp,
+            modifier = Modifier.padding(bottom = 24.dp),
         )
         
         Text(

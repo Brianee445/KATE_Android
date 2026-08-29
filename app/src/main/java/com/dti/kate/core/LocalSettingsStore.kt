@@ -18,6 +18,7 @@ class LocalSettingsStore(context: Context) {
         private const val KEY_WAKE_WORD_ENABLED = "wake_word_enabled"
         private const val KEY_STT_MODE = "stt_mode"
         private const val KEY_USER_NAME = "user_name"
+        private const val KEY_AGREED_TO_TERMS = "agreed_to_terms"
     }
 
     // Captured once during onboarding (see OnboardingScreen's name step) so
@@ -28,6 +29,10 @@ class LocalSettingsStore(context: Context) {
     // the "never asked" case if that distinction ever matters.
     fun getUserName(): String? = prefs.getString(KEY_USER_NAME, null)?.takeIf { it.isNotBlank() }
     fun setUserName(value: String) = prefs.edit().putString(KEY_USER_NAME, value.trim()).apply()
+
+    /** Whether the user has tapped "I Agree" on UserAgreementScreen - checked at Splash/Login/Register so it's only ever shown once per account, not on every launch. Local-only (not synced to the backend); a reinstall or new device will ask again, which is an acceptable/expected trade-off for the added complexity a synced flag would need. */
+    fun hasAgreedToTerms(): Boolean = prefs.getBoolean(KEY_AGREED_TO_TERMS, false)
+    fun setAgreedToTerms(value: Boolean) = prefs.edit().putBoolean(KEY_AGREED_TO_TERMS, value).apply()
 
     fun getToneLevel(): Float = prefs.getFloat(KEY_TONE, 0.5f)
     fun setToneLevel(value: Float) = prefs.edit().putFloat(KEY_TONE, value).apply()

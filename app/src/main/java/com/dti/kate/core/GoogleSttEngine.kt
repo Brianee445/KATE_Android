@@ -89,7 +89,13 @@ class GoogleSttEngine(
             // default, which is what was cutting the mic off early.
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, timeoutMs)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, timeoutMs)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, timeoutMs)
+            // NOT derived from the user's setting - this is the minimum
+            // length of the utterance itself before the recognizer will
+            // even consider it complete, unrelated to "how long to wait
+            // in silence." Kept as a small fixed floor so short utterances
+            // like a bare "hi" aren't held open for the full configured
+            // duration before returning.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
             // EXTRA_PREFER_OFFLINE deliberately NOT set. Confirmed via
             // real-device testing (Transsion hardware) that it does not
             // gracefully fall through to network recognition when the

@@ -44,6 +44,11 @@ sealed class KateAction {
     object AnswerCall : KateAction()
     object DeclineCall : KateAction()
 
+    // ---- Reminders ----
+    data class SetReminder(val text: String, val triggerAtMillis: Long) : KateAction()
+    /** "remind me" was heard but ReminderTimeParser couldn't extract a time from it - asked to clarify rather than silently guessing or dropping the request. */
+    object ReminderTimeUnclear : KateAction()
+
     object Unknown : KateAction()
 }
 
@@ -120,6 +125,16 @@ class KateResponseGenerator {
             (lower.contains("alarm") || (lower.contains("wake me") && lower.contains("at"))) &&
                 !lower.contains("stop") && !lower.contains("cancel") ->
                 KateAction.SetAlarm
+
+            // ---- Reminders - "remind me to X at/in Y". Checked after Alarm
+            // since "remind" never overlaps with alarm's trigger words, and
+            // before Math/WebSearch since a reminder body can itself
+            // contain digits/question words that would otherwise misfire.
+            lower.startsWith("remind me") -> {
+                val parsed = ReminderTimeParser.parse(lower)
+                if (parsed != null) KateAction.SetReminder(parsed.text, parsed.triggerAtMillis)
+                else KateAction.ReminderTimeUnclear
+            }
 
             // ---- Math - checked before WebSearch's "what "/"how " catch-all,
             // since "what's 12 times 4" would otherwise be treated as a
@@ -573,6 +588,27 @@ class KateResponseGenerator {
         KateTone.SASSY -> listOf("Handing this off to the clock app - I don't do everything myself.")
     })
 
+    /** @param triggerAtMillis already resolved by ReminderTimeParser - this only formats it for speech. */
+    fun speechForReminderSet(text: String, triggerAtMillis: Long, tone: KateTone): String {
+        val now = java.util.Calendar.getInstance()
+        val target = java.util.Calendar.getInstance().apply { timeInMillis = triggerAtMillis }
+        val sameDay = now.get(java.util.Calendar.DAY_OF_YEAR) == target.get(java.util.Calendar.DAY_OF_YEAR) &&
+            now.get(java.util.Calendar.YEAR) == target.get(java.util.Calendar.YEAR)
+        val timePattern = if (sameDay) "h:mm a" else "h:mm a 'on' EEEE"
+        val whenText = java.text.SimpleDateFormat(timePattern, java.util.Locale.getDefault()).format(java.util.Date(triggerAtMillis))
+        return pick("reminder_set.$tone.$sameDay", when (tone) {
+            KateTone.PROFESSIONAL -> listOf("Reminder set: $text at $whenText.")
+            KateTone.BALANCED -> listOf("Got it - I'll remind you to $text at $whenText.")
+            KateTone.SASSY -> listOf("Fine, reminding you to $text at $whenText. Don't blame me if you ignore it.")
+        })
+    }
+
+    fun speechForReminderTimeUnclear(tone: KateTone): String = pick("reminder_unclear.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I didn't catch a time for that reminder - try \"remind me to X at 5pm\" or \"in 20 minutes.\"")
+        KateTone.BALANCED -> listOf("I got the reminder but not the time - try saying \"at 5pm\" or \"in 20 minutes.\"")
+        KateTone.SASSY -> listOf("Reminder for when, exactly? Give me a time and I'll take care of it.")
+    })
+
     fun speechForWhoMadeYou(tone: KateTone): String = pick("who_made_you.$tone", when (tone) {
         KateTone.PROFESSIONAL -> listOf(
             "I was created by Ede Johnwesley, the founder of Purple Labs.",
@@ -673,6 +709,19 @@ class KateResponseGenerator {
         KateTone.PROFESSIONAL -> listOf("I need accessibility permission enabled to do that. You can turn it on in Settings.")
         KateTone.BALANCED -> listOf("I need the accessibility permission turned on for that - it's in Settings.")
         KateTone.SASSY -> listOf("Can't do that without accessibility permission - go flip that on in Settings.")
+    })
+
+    /** Distinct from speechForAccessibilityRequired: permission IS already
+     * granted here, the live service connection just dropped (see
+     * DeviceControlManager.isAccessibilityServiceRunning() doc comment) -
+     * telling the user to "turn on" a permission they've already turned on
+     * is confusing and reads as the app being stuck asking for the same
+     * thing repeatedly, which is exactly the failure mode this exists to
+     * avoid. */
+    fun speechForAccessibilityReconnectNeeded(tone: KateTone): String = pick("accessibility_reconnect.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("My accessibility connection dropped in the background. Turning the switch off and back on in Settings should reconnect it.")
+        KateTone.BALANCED -> listOf("My accessibility connection dropped - toggle it off and back on in Settings and I should be able to do that.")
+        KateTone.SASSY -> listOf("My accessibility link glitched out - toggle it off and on in Settings and try me again.")
     })
 
     // ==================== BATCH 5 ADDITIONS ====================

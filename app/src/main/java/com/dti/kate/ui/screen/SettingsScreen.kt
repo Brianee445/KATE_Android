@@ -26,6 +26,7 @@ import androidx.navigation.NavController
 import com.dti.kate.BuildConfig
 import com.dti.kate.core.DebugLog
 import com.dti.kate.core.LocalSettingsStore
+import com.dti.kate.core.SecurePreferences
 import com.dti.kate.repository.Repository
 import com.dti.kate.service.KateAccessibilityService
 import com.dti.kate.ui.components.*
@@ -348,11 +349,27 @@ fun SettingsScreen(
 
             item { SettingsSectionHeader(title = "Permissions") }
             item {
-                // Re-checked every recomposition (cheap Settings.Secure
-                // read), same reasoning as the entitlement gates above -
-                // status should update live once the user comes back from
-                // the system Accessibility screen without reopening this one.
-                val accessibilityEnabled = KateAccessibilityService.isEnabled(context)
+                // Re-checked every recomposition (cheap reads), same
+                // reasoning as the entitlement gates above - status should
+                // update live once the user comes back from the system
+                // Accessibility screen without reopening this one.
+                //
+                // isEnabled() (Settings.Secure) and isAccessibilityServiceRunning()
+                // (live service instance) can disagree: Android can silently
+                // kill the connected service process - especially under
+                // aggressive OEM battery management (Transsion, flagged
+                // elsewhere in this screen) - without removing it from the
+                // enabled list. That "enabled but disconnected" state is
+                // what actually produces the intermittent "accessibility
+                // malfunctioning" reports, and toggling the switch off/on
+                // is what forces Android to reconnect it - opening Settings
+                // when it's already listed as enabled doesn't visibly help,
+                // which is why the two states get different guidance below.
+                val settingEnabled = KateAccessibilityService.isEnabled(context)
+                val serviceConnected = com.dti.kate.utils.DeviceControlManager(context)
+                    .isAccessibilityServiceRunning()
+                val accessibilityEnabled = settingEnabled && serviceConnected
+                val staleConnection = settingEnabled && !serviceConnected
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -373,7 +390,11 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = if (accessibilityEnabled) "On" else "Off",
+                                text = when {
+                                    accessibilityEnabled -> "On"
+                                    staleConnection -> "Reconnect needed"
+                                    else -> "Off"
+                                },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (accessibilityEnabled) LimeAccent else TextSecondary,
                             )
@@ -383,7 +404,16 @@ fun SettingsScreen(
                                 "taking screenshots, and declining calls by voice.",
                             style = MaterialTheme.typography.bodySmall, color = TextSecondary,
                         )
-                        if (!accessibilityEnabled) {
+                        if (staleConnection) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Kate's accessibility connection dropped in the " +
+                                    "background - this happens sometimes on this device. " +
+                                    "Tap to open Accessibility settings, then turn Kate's " +
+                                    "switch off and back on to reconnect it.",
+                                style = MaterialTheme.typography.labelSmall, color = LimeAccent,
+                            )
+                        } else if (!accessibilityEnabled) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "Tap to open Accessibility settings and turn Kate on. " +
@@ -597,6 +627,7 @@ fun SettingsScreen(
                 SettingsButtonItem(
                     title = "Export Debug Log",
                     description = "Share diagnostic logs for the voice engine (for troubleshooting)",
+                    enabled = false,
                     onClick = {
                         val shareIntent = viewModel.exportDebugLog()
                         if (shareIntent != null) {
@@ -607,6 +638,15 @@ fun SettingsScreen(
             }
 
             item { SettingsSectionHeader(title = "About") }
+            item {
+                if (SecurePreferences(context).isAdmin()) {
+                    SettingsButtonItem(
+                        title = "Admin Dashboard",
+                        description = "Users, revenue, and error stats",
+                        onClick = { navController.navigate("admin_dashboard") },
+                    )
+                }
+            }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -767,22 +807,34 @@ private fun SettingsSwitchItem(
 }
 
 @Composable
-private fun SettingsButtonItem(title: String, description: String, onClick: () -> Unit, color: Color = TextPrimary) {
+private fun SettingsButtonItem(
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+    color: Color = TextPrimary,
+    enabled: Boolean = true,
+) {
+    val rowModifier = if (enabled) {
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(16.dp)
+    } else {
+        Modifier.fillMaxWidth().padding(16.dp)
+    }
+    val effectiveColor = if (enabled) color else TextSecondary
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
         shape = KateShape.MD,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(16.dp),
+            modifier = rowModifier,
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.bodyMedium, color = color)
+                Text(text = title, style = MaterialTheme.typography.bodyMedium, color = effectiveColor)
                 Text(text = description, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = TextSecondary)
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = TextSecondary.copy(alpha = if (enabled) 1f else 0.4f))
         }
     }
 }

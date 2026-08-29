@@ -58,6 +58,16 @@ interface KateApiService {
         @Query("sample_rate") sampleRate: Int = 16000,
         @Query("channels") channels: Int = 1,
     ): TranscribeResponse
+
+    // ==================== SEARCH ====================
+    // LLM-routed answer, proxied server-side to agent-router - same
+    // reasoning as transcribe() above, key never ships inside the APK.
+    // Backend caches by normalized query so repeat questions are free.
+    @POST("api/v1/search")
+    suspend fun search(
+        @Header("Authorization") token: String,
+        @Body request: SearchRequest,
+    ): SearchResponse
     
     @GET("api/v1/chat/history")
     suspend fun getChatHistory(
@@ -275,6 +285,21 @@ class KateApiClient(private val context: Context) {
         }
     }
     
+    /**
+     * LLM-routed answer for general Q&A, proxied through the backend.
+     * Returns null on any failure (network, timeout, no auth, server
+     * error) - same contract as transcribeAudio - callers should treat
+     * null exactly like "no answer available" and fall back accordingly.
+     */
+    suspend fun search(query: String): SearchResponse? {
+        val token = securePrefs.getAccessToken() ?: return null
+        return try {
+            api.search("Bearer $token", SearchRequest(query))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun clearAuth() {
         securePrefs.clearTokens()
     }

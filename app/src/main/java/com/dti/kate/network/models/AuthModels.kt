@@ -87,6 +87,21 @@ data class TranscribeResponse(
     val latencyMs: Int,
 )
 
+// LLM-routed answer for general Q&A the free instant-answer sources
+// (DuckDuckGo, Wikipedia - see WebSearchService/WikipediaService) don't
+// cover well. Proxied through the backend so the agent-router key never
+// ships inside the APK; the backend is expected to cache by normalized
+// query so repeat questions don't re-spend a routing call.
+data class SearchRequest(
+    val query: String,
+)
+
+data class SearchResponse(
+    val answer: String,
+    val cached: Boolean,
+    val source: String,
+)
+
 data class HistoryResponse(
     val conversations: List<ConversationHistoryItem>,
     val limit: Int,

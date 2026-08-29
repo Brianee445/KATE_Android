@@ -66,7 +66,13 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
 
         val searchInput = waitForNodeById("com.whatsapp:id/search_src_text")
             ?: return false.also { Log.w(TAG, "WhatsApp: search input not found") }
-        setText(searchInput, contactName)
+        if (!setText(searchInput, contactName)) {
+            delay(200)
+            val retryInput = waitForNodeById("com.whatsapp:id/search_src_text")
+            if (retryInput == null || !setText(retryInput, contactName)) {
+                return false.also { Log.w(TAG, "WhatsApp: could not type into search field") }
+            }
+        }
         delay(600) // let the results list actually filter before reading it
 
         // First result row in the filtered contact/chat list.
@@ -76,7 +82,9 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
 
         val composeField = waitForNodeById("com.whatsapp:id/entry")
             ?: return false.also { Log.w(TAG, "WhatsApp: compose field not found") }
-        setText(composeField, message)
+        if (!setText(composeField, message)) {
+            return false.also { Log.w(TAG, "WhatsApp: could not type into compose field") }
+        }
         delay(300)
 
         val sendButton = waitForNodeById("com.whatsapp:id/send")
@@ -97,7 +105,9 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
             ?: waitForNodeByDescription("Search Messenger")
             ?: return false.also { Log.w(TAG, "Messenger: search field not found") }
         searchNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        setText(searchNode, contactName)
+        if (!setText(searchNode, contactName)) {
+            return false.also { Log.w(TAG, "Messenger: could not type into search field") }
+        }
         delay(600)
 
         val resultRow = waitForNodeByDescription(contactName)
@@ -106,7 +116,9 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
 
         val composeField = waitForNodeById("com.facebook.orca:id/message_input_text")
             ?: return false.also { Log.w(TAG, "Messenger: compose field not found") }
-        setText(composeField, message)
+        if (!setText(composeField, message)) {
+            return false.also { Log.w(TAG, "Messenger: could not type into compose field") }
+        }
         delay(300)
 
         val sendButton = waitForNodeById("com.facebook.orca:id/send_button")
@@ -126,10 +138,30 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
         return true
     }
 
-    private fun setText(node: AccessibilityNodeInfo, text: String) {
+    /** @return whether the field actually accepted the text - was
+     * previously called without checking this, so a failed SET_TEXT (e.g.
+     * WhatsApp's search field, which needs focus first - see below) failed
+     * silently instead of being visible to callers/logs. */
+    private fun setText(node: AccessibilityNodeInfo, text: String): Boolean {
+        // The node reference can go stale between being fetched (often
+        // several hundred ms earlier, across a delay()) and being acted on
+        // here - refresh() re-syncs it against the live tree first.
+        node.refresh()
+
+        // WhatsApp's search field (and some other SearchView-backed inputs)
+        // silently ignore ACTION_SET_TEXT until the node is actually
+        // focused - this was the root cause of "opens search, but can't
+        // type into it": the field was found and SET_TEXT was attempted,
+        // but never focused first, so the system dropped it.
+        if (!node.isFocused) {
+            node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        }
+
         val arguments = Bundle()
         arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-        node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        val ok = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        if (!ok) Log.w(TAG, "setText: ACTION_SET_TEXT rejected for \"$text\"")
+        return ok
     }
 
     /** performAction(ACTION_CLICK) often needs to run on a parent view, not

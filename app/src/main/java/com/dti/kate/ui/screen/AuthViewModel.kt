@@ -22,11 +22,6 @@ class AuthViewModel(context: Context) {
         }
     }
 
-    fun loginWithGoogle() {
-        // TODO: no Google OAuth endpoint exists on KateApiService yet -
-        // add one (e.g. POST api/v1/auth/google) before wiring this up.
-    }
-
     fun register(email: String, password: String, fullName: String, callback: (Boolean, String?) -> Unit) {
         scope.launch {
             repository.register(email, password, fullName.ifBlank { null }).fold(
@@ -34,10 +29,6 @@ class AuthViewModel(context: Context) {
                 onFailure = { error -> callback(false, error.message ?: "Registration failed") }
             )
         }
-    }
-
-    fun registerWithGoogle() {
-        // TODO: same as loginWithGoogle - needs a backend endpoint first.
     }
 
     fun resetPassword(email: String, callback: (Boolean, String?) -> Unit) {

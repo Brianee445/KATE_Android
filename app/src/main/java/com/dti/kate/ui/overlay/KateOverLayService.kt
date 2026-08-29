@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
-import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.CountDownTimer
@@ -14,7 +13,6 @@ import android.os.IBinder
 import android.view.*
 import android.widget.FrameLayout
 import android.widget.ImageButton
-import android.widget.ImageView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.dti.kate.R
@@ -23,9 +21,13 @@ import com.dti.kate.utils.DeviceControlManager
 import kotlinx.coroutines.*
 
 /**
- * Always-visible floating bubble that listens, processes, and speaks
- * entirely in place - the app is never opened for this. Triggered by
+ * Floating bubble that listens, processes, and speaks entirely in place -
+ * the app is never opened for this. Triggered by
  * KateForegroundService.onWakeGestureDetected() (shake/raise/wake word).
+ * Hidden whenever idle (see showOverlayBubble/hideOverlayBubble) - it
+ * appears on a wake trigger and disappears again once it's done speaking
+ * or performing the requested action, rather than sitting on screen
+ * permanently.
  *
  * Previously this class only rendered a draggable bubble with no wiring to
  * VoskManager, KateCommandProcessor, or TTS at all - it was instantiated
@@ -56,7 +58,7 @@ class KateOverlayService : Service() {
         private const val ACTION_ENSURE_SHOWING = "com.dti.kate.overlay.ENSURE_SHOWING"
         private const val ACTION_ACTIVATE = "com.dti.kate.overlay.ACTIVATE"
 
-        /** Ensures the bubble is showing (idle), without starting a listen cycle. Call once (e.g. from KateForegroundService.onCreate) so the bubble is present on any screen even before the first wake trigger. */
+        /** Ensures the service and its (hidden) overlay view exist, without starting a listen cycle or making the bubble visible - call once (e.g. from KateForegroundService.onCreate) so the view is ready to show the instant the first wake trigger fires. */
         fun ensureShowing(context: Context) {
             val intent = Intent(context, KateOverlayService::class.java).apply {
                 action = ACTION_ENSURE_SHOWING
@@ -171,6 +173,7 @@ class KateOverlayService : Service() {
     private fun startListenCycle() {
         if (activeCycle?.isActive == true) return // already mid-cycle, ignore re-trigger
         collapseTimer?.cancel()
+        showOverlayBubble()
 
         activeCycle = serviceScope.launch {
             setState(OverlayState.LISTENING)
@@ -201,7 +204,9 @@ class KateOverlayService : Service() {
 
             if (transcript.isNullOrBlank()) {
                 setState(OverlayState.IDLE)
-                scheduleAutoCollapse()
+                // Nothing was heard, nothing to show - hide right away
+                // rather than lingering visible with nothing to do.
+                hideOverlayBubble()
                 return@launch
             }
 
@@ -209,17 +214,30 @@ class KateOverlayService : Service() {
             val result = commandProcessor.process(transcript, tone)
 
             setState(OverlayState.SPEAKING)
-            // Per product spec: the overlay never writes the transcript or
-            // reply out as text - voice only - EXCEPT when the command
-            // itself was an explicit dictation/typing request, where
-            // showing what got typed is the point.
-            if (result.action is KateAction.TypeText) {
-                showTypedTextBriefly(result.action.text)
+            // Per product spec: the overlay only writes text on screen for
+            // results worth reading back - a dictated message, a joke, a
+            // calculation, or a search answer - never for ordinary device
+            // actions ("turn on wifi", "call mom") where voice alone is
+            // the whole interaction.
+            val showsResult = when (result.action) {
+                is KateAction.TypeText -> { showResultText(result.action.text); true }
+                is KateAction.TellJoke, is KateAction.Calculate, is KateAction.WebSearch,
+                is KateAction.SetReminder -> {
+                    showResultText(result.speech); true
+                }
+                else -> false
             }
             speakAndAwait(result.speech, tone)
 
             setState(OverlayState.IDLE)
-            scheduleAutoCollapse()
+            if (showsResult) {
+                // Give the user a moment to actually read the box before it
+                // (and the bubble) disappear, rather than yanking it away
+                // the instant speech ends.
+                scheduleAutoHide()
+            } else {
+                hideOverlayBubble()
+            }
         }
     }
 
@@ -259,9 +277,6 @@ class KateOverlayService : Service() {
                     OverlayState.PROCESSING -> COLOR_PROCESSING
                     OverlayState.SPEAKING -> COLOR_SPEAKING
                 }
-
-                val avatar = overlayView.findViewById<ImageView>(R.id.kate_avatar)
-                avatar.setColorFilter(color, PorterDuff.Mode.SRC_ATOP)
 
                 val ring = overlayView.findViewById<View>(R.id.state_ring)
                 (ring.background as? GradientDrawable)?.setStroke(dp(3), color)
@@ -308,7 +323,7 @@ class KateOverlayService : Service() {
      * underlying mistake (IO-dispatcher coroutine touching an
      * Android UI/timer API), different call site, so it needed its own fix.
      */
-    private fun scheduleAutoCollapse() {
+    private fun scheduleAutoHide() {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             try {
                 collapseTimer?.cancel()
@@ -316,19 +331,68 @@ class KateOverlayService : Service() {
                     override fun onTick(millisUntilFinished: Long) {}
                     override fun onFinish() {
                         if (isExpanded) toggleExpanded()
+                        hideOverlayBubble()
                     }
                 }.start()
             } catch (e: Exception) {
-                DebugLog.log(this@KateOverlayService, "KateOverLayService", "scheduleAutoCollapse failed: ${e.javaClass.simpleName}: ${e.message}")
+                DebugLog.log(this@KateOverlayService, "KateOverLayService", "scheduleAutoHide failed: ${e.javaClass.simpleName}: ${e.message}")
             }
         }
     }
 
-    /** Text only appears here, and only for an explicit typing command - see setState's call site. Reuses the existing expanded-view transcript TextView rather than adding new UI. */
-    private fun showTypedTextBriefly(text: String) {
+    /** Makes the bubble visible again - called on any wake trigger. Safe to call even if it's already visible. */
+    private fun showOverlayBubble() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                collapseTimer?.cancel()
+                if (::overlayView.isInitialized) overlayView.visibility = View.VISIBLE
+            } catch (e: Exception) {
+                DebugLog.log(this@KateOverlayService, "KateOverLayService", "showOverlayBubble failed: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+    }
+
+    /** Hides the bubble (and collapses any open result panel) - called immediately once a task with nothing to read finishes, or after scheduleAutoHide's grace period for one that showed a result. */
+    private fun hideOverlayBubble() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                if (isExpanded) toggleExpanded()
+                ringAnimator?.cancel()
+                if (::overlayView.isInitialized) overlayView.visibility = View.GONE
+            } catch (e: Exception) {
+                DebugLog.log(this@KateOverlayService, "KateOverLayService", "hideOverlayBubble failed: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Shows text in the expanded result box - used for TypeText's dictated
+     * text and for TellJoke/Calculate/WebSearch's spoken answer, so the
+     * user has something to read/re-read beyond just hearing it once. The
+     * box itself is wrap_content (see overlay_kate.xml), so it already
+     * sizes to short content like a one-line joke - this just adds a cap
+     * for the opposite case (a long search answer), switching the
+     * ScrollView from hugging its content to a fixed max height with
+     * scrolling once text would push it past a comfortable size.
+     */
+    private fun showResultText(text: String) {
         val expandedView = overlayView.findViewById<FrameLayout>(R.id.overlay_expanded)
         val transcriptLabel = expandedView.findViewById<android.widget.TextView>(R.id.overlay_transcript)
+        val scrollView = expandedView.findViewById<android.widget.ScrollView>(R.id.overlay_transcript_scroll)
         transcriptLabel?.text = text
+
+        scrollView?.let { sv ->
+            sv.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            sv.requestLayout()
+            sv.post {
+                val maxHeightPx = dp(280)
+                if (sv.height > maxHeightPx) {
+                    sv.layoutParams.height = maxHeightPx
+                    sv.requestLayout()
+                }
+            }
+        }
+
         if (!isExpanded) toggleExpanded()
     }
 
@@ -353,14 +417,18 @@ class KateOverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
         )
-        params.gravity = Gravity.TOP or Gravity.START
-        params.x = 0
-        params.y = 100
+        // Bottom-anchored, not top-left - x/y below are offsets from the
+        // bottom-left corner under Gravity.BOTTOM (no START/CENTER), which
+        // is also what the drag-clamp math in setupTouchListeners assumes.
+        params.gravity = Gravity.BOTTOM
+        params.x = ((resources.displayMetrics.widthPixels - dp(104)) / 2).coerceAtLeast(0)
+        params.y = dp(140)
 
         setupTouchListeners()
         windowManager.addView(overlayView, params)
         overlayAdded = true
 
+        overlayView.visibility = View.GONE // hidden until the first wake trigger - see showOverlayBubble
         overlayView.findViewById<View>(R.id.state_ring).alpha = 0f // starts idle, no pulse
         overlayView.findViewById<ImageButton>(R.id.overlay_close)?.setOnClickListener {
             if (isExpanded) toggleExpanded()
@@ -374,6 +442,17 @@ class KateOverlayService : Service() {
         var initialTouchX = 0f
         var initialTouchY = 0f
 
+        val screenWidth = resources.displayMetrics.widthPixels
+        val bubbleWidthPx = dp(104) // matches state_ring, the widest collapsed element
+        val maxX = (screenWidth - bubbleWidthPx).coerceAtLeast(0)
+        // Bottom-only: the bubble can be nudged up/down a bit for reachability
+        // (e.g. clear of a gesture nav bar) but never dragged away from the
+        // bottom band, and never sideways off past the top - this is what
+        // "shown at the bottom of the screen only" means in practice for a
+        // draggable bubble, versus fully locking position.
+        val minY = dp(60)
+        val maxY = dp(260)
+
         bubbleView.setOnTouchListener { view, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -386,8 +465,11 @@ class KateOverlayService : Service() {
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val params = overlayView.layoutParams as WindowManager.LayoutParams
-                    params.x = initialX + (event.rawX - initialTouchX).toInt()
-                    params.y = initialY + (event.rawY - initialTouchY).toInt()
+                    params.x = (initialX + (event.rawX - initialTouchX).toInt()).coerceIn(0, maxX)
+                    // Gravity.BOTTOM measures y upward from the bottom edge,
+                    // so dragging the finger down (positive dy) should
+                    // *decrease* y, not increase it.
+                    params.y = (initialY - (event.rawY - initialTouchY).toInt()).coerceIn(minY, maxY)
                     windowManager.updateViewLayout(overlayView, params)
                     true
                 }

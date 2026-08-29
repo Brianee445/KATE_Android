@@ -85,5 +85,6 @@ fun KateNavHost(navController: NavHostController = rememberNavController()) {
         composable("admin_dashboard") { AdminDashboardScreen(navController) }
         composable("privacy_policy") { PrivacyPolicyScreen(navController) }
         composable("terms_of_service") { TermsOfServiceScreen(navController) }
+        composable("user_agreement") { UserAgreementScreen(navController) }
     }
 }
