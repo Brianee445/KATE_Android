@@ -579,7 +579,7 @@ fun SettingsScreen(
                 // after the user leaves this screen.
                 var previewTts by remember { mutableStateOf<android.speech.tts.TextToSpeech?>(null) }
                 var voices by remember { mutableStateOf<List<android.speech.tts.Voice>>(emptyList()) }
-                var selectedVoiceName by remember { mutableStateOf(localStore.getPreferredVoiceName()) }
+                var selectedVoiceName by remember { mutableStateOf(LocalSettingsStore(context).getPreferredVoiceName()) }
 
                 DisposableEffect(Unit) {
                     val tts = android.speech.tts.TextToSpeech(context) { status ->
@@ -638,7 +638,7 @@ fun SettingsScreen(
                                             )
                                         } else {
                                             selectedVoiceName = voice.name
-                                            localStore.setPreferredVoiceName(voice.name)
+                                            LocalSettingsStore(context).setPreferredVoiceName(voice.name)
                                             previewTts?.voice = voice
                                             previewTts?.speak(
                                                 "Hi, this is how I sound.",
@@ -977,7 +977,6 @@ private fun SettingsSwitchItem(
     }
 }
 
-@Composable
 /** Raw android.speech.tts.Voice names are internal identifiers like
  * "en-us-x-iol-local" or "en-US-language" - meaningless to a user. This
  * derives a short human label instead: network-quality voices are called
@@ -998,6 +997,7 @@ private fun friendlyVoiceLabel(voice: android.speech.tts.Voice): String {
     return "$quality voice #$shortId$networkNote"
 }
 
+@Composable
 private fun SettingsButtonItem(
     title: String,
     description: String,
