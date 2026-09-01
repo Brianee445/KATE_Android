@@ -3,6 +3,7 @@ package com.dti.kate.core
 import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import kotlinx.coroutines.CompletableDeferred
 import java.util.Locale
 import java.util.UUID
@@ -18,6 +19,21 @@ class KateTtsEngine(private val context: Context) {
             ready.complete(status == TextToSpeech.SUCCESS)
         }
         isPlatformTtsReady = ready.await()
+    }
+
+    /** English-locale voices available from whatever TTS engine is
+     * installed on this device - for SettingsScreen's voice picker.
+     * Previously nothing let the user choose a specific voice at all -
+     * speakAndAwait only ever set a *language* (Locale.US), and which
+     * actual Voice the system picks for that language is entirely up to
+     * the device/engine, which is why it defaulted to a male-sounding
+     * voice here with no way to change it. */
+    fun availableVoices(): List<Voice> {
+        val engine = platformTts ?: return emptyList()
+        return engine.voices
+            ?.filter { it.locale.language == Locale.US.language && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+            ?.sortedWith(compareByDescending<Voice> { it.quality }.thenBy { it.name })
+            ?: emptyList()
     }
 
     /**
@@ -40,6 +56,15 @@ class KateTtsEngine(private val context: Context) {
             }
             engine.setSpeechRate(rate)
             engine.setPitch(0.95f)
+        }
+
+        val preferredVoiceName = LocalSettingsStore(context).getPreferredVoiceName()
+        val selectedVoice = preferredVoiceName?.let { name -> engine.voices?.firstOrNull { it.name == name } }
+        if (selectedVoice != null) {
+            // Setting a specific Voice already carries its own locale -
+            // no need to also set engine.language here.
+            engine.voice = selectedVoice
+        } else {
             engine.language = Locale.US
         }
 

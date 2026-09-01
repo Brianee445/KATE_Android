@@ -19,6 +19,7 @@ class LocalSettingsStore(context: Context) {
         private const val KEY_STT_MODE = "stt_mode"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_AGREED_TO_TERMS = "agreed_to_terms"
+        private const val KEY_VOICE_NAME = "preferred_voice_name"
     }
 
     // Captured once during onboarding (see OnboardingScreen's name step) so
@@ -33,6 +34,10 @@ class LocalSettingsStore(context: Context) {
     /** Whether the user has tapped "I Agree" on UserAgreementScreen - checked at Splash/Login/Register so it's only ever shown once per account, not on every launch. Local-only (not synced to the backend); a reinstall or new device will ask again, which is an acceptable/expected trade-off for the added complexity a synced flag would need. */
     fun hasAgreedToTerms(): Boolean = prefs.getBoolean(KEY_AGREED_TO_TERMS, false)
     fun setAgreedToTerms(value: Boolean) = prefs.edit().putBoolean(KEY_AGREED_TO_TERMS, value).apply()
+
+    /** The android.speech.tts.Voice.name the user picked in Settings, or null for "use the system default" (previous behavior). See KateTtsEngine.availableVoices()/speakAndAwait. */
+    fun getPreferredVoiceName(): String? = prefs.getString(KEY_VOICE_NAME, null)
+    fun setPreferredVoiceName(value: String?) = prefs.edit().putString(KEY_VOICE_NAME, value).apply()
 
     fun getToneLevel(): Float = prefs.getFloat(KEY_TONE, 0.5f)
     fun setToneLevel(value: Float) = prefs.edit().putFloat(KEY_TONE, value).apply()

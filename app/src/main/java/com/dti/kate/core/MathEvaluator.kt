@@ -38,6 +38,7 @@ object MathEvaluator {
     private val MATH_WORDS = listOf(
         "plus", "minus", "times", "multiplied", "divided", "percent", "%",
         "square root", "squared", "cubed", "power of", "add", "subtract",
+        "calculate", "solve", "compute", "breakdown", "break down", "sum of",
     )
 
     /** Converts spoken/mixed phrasing into a plain symbolic expression the
@@ -47,8 +48,8 @@ object MathEvaluator {
         var s = raw.lowercase().trim()
         s = s.removeSuffix("?")
         for (filler in listOf(
-            "what's", "what is", "whats", "calculate", "compute",
-            "can you tell me", "tell me", "how much is",
+            "what's", "what is", "whats", "calculate", "compute", "solve",
+            "breakdown", "break down", "can you tell me", "tell me", "how much is",
         )) {
             if (s.startsWith(filler)) s = s.removePrefix(filler).trim()
         }

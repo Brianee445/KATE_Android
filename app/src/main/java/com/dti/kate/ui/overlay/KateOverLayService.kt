@@ -6,13 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
-import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.CountDownTimer
 import android.os.IBinder
 import android.view.*
 import android.widget.FrameLayout
-import android.widget.ImageButton
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.dti.kate.R
@@ -44,14 +42,6 @@ class KateOverlayService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "kate_overlay_channel"
         private const val TAG = "KateOverlayService"
-
-        // Matches ui/theme/Color.kt's Kate* state colors - the overlay is
-        // a plain Android View, not Compose, so these are duplicated as
-        // raw ARGB ints. Keep in sync if the palette changes.
-        private const val COLOR_IDLE = 0xFFA79AB8.toInt()       // TextSecondary
-        private const val COLOR_LISTENING = 0xFFD4FF4F.toInt()  // LimeAccent
-        private const val COLOR_PROCESSING = 0xFF7C3AED.toInt() // Purple70
-        private const val COLOR_SPEAKING = 0xFFFF6B9D.toInt()
 
         private const val AUTO_COLLAPSE_DELAY_MS = 4000L
 
@@ -99,7 +89,7 @@ class KateOverlayService : Service() {
     private var isExpanded = false
     private var overlayAdded = false
     private var state = OverlayState.IDLE
-    private var ringAnimator: ValueAnimator? = null
+    private var avatarAnimator: ValueAnimator? = null
     private var collapseTimer: CountDownTimer? = null
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -174,6 +164,7 @@ class KateOverlayService : Service() {
         if (activeCycle?.isActive == true) return // already mid-cycle, ignore re-trigger
         collapseTimer?.cancel()
         showOverlayBubble()
+        playActivationPop()
 
         activeCycle = serviceScope.launch {
             setState(OverlayState.LISTENING)
@@ -220,9 +211,7 @@ class KateOverlayService : Service() {
             // actions ("turn on wifi", "call mom") where voice alone is
             // the whole interaction.
             val showsResult = when (result.action) {
-                is KateAction.TypeText -> { showResultText(result.action.text); true }
-                is KateAction.TellJoke, is KateAction.Calculate, is KateAction.WebSearch,
-                is KateAction.SetReminder -> {
+                is KateAction.Calculate, is KateAction.WebSearch -> {
                     showResultText(result.speech); true
                 }
                 else -> false
@@ -246,8 +235,42 @@ class KateOverlayService : Service() {
     private suspend fun speakAndAwait(text: String, tone: KateTone? = null) = ttsEngine.speakAndAwait(text, tone)
 
     // ------------------------------------------------------------------
-    // Visual state - ring pulse + avatar tint, no text
+    // Visual state - the logo itself pulses (no separate ring anymore,
+    // no per-state color - see class doc for why: this is meant to read
+    // as "just a logo that shows up", not a mic/status widget).
     // ------------------------------------------------------------------
+
+    /**
+     * One-shot "I heard you" acknowledgment - scale-in from 0 plus a
+     * single 360° spin, played once at the very start of each cycle
+     * (before any listening/processing begins). This is the entire
+     * activation signal in the new design: no ring, no color, no mic
+     * icon - just the logo appearing with a bit of motion so it doesn't
+     * feel like it just snapped into existence.
+     *
+     * Same thread-safety reasoning as setState(): must run on the main
+     * looper (Animator requirement), called from serviceScope
+     * (Dispatchers.IO), so posted rather than run directly.
+     */
+    private fun playActivationPop() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                val avatar = overlayView.findViewById<View>(R.id.kate_avatar)
+                avatarAnimator?.cancel()
+                avatar.scaleX = 0f
+                avatar.scaleY = 0f
+                avatar.rotation = 0f
+                avatar.animate()
+                    .scaleX(1f).scaleY(1f)
+                    .rotationBy(360f)
+                    .setDuration(500L)
+                    .setInterpolator(android.view.animation.OvershootInterpolator(1.4f))
+                    .start()
+            } catch (e: Exception) {
+                DebugLog.log(this@KateOverlayService, "KateOverlayService", "playActivationPop failed: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+    }
 
     /**
      * Safe to call from any thread. startListenCycle runs on
@@ -268,39 +291,28 @@ class KateOverlayService : Service() {
             // stopping, view detached) in the gap between posting and
             // running, overlayView.findViewById or the animator can throw.
             // An uncaught exception here would crash the whole main thread
-            // exactly like the original Looper bug did - a UI ring-pulse
-            // update should never be able to take the whole process down.
+            // exactly like the original Looper bug did - a UI update
+            // should never be able to take the whole process down.
             try {
-                val color = when (newState) {
-                    OverlayState.IDLE -> COLOR_IDLE
-                    OverlayState.LISTENING -> COLOR_LISTENING
-                    OverlayState.PROCESSING -> COLOR_PROCESSING
-                    OverlayState.SPEAKING -> COLOR_SPEAKING
-                }
+                val avatar = overlayView.findViewById<View>(R.id.kate_avatar)
 
-                val ring = overlayView.findViewById<View>(R.id.state_ring)
-                (ring.background as? GradientDrawable)?.setStroke(dp(3), color)
-
-                ringAnimator?.cancel()
+                avatarAnimator?.cancel()
                 if (newState == OverlayState.IDLE) {
-                    ring.alpha = 0f
-                    ring.scaleX = 1f
-                    ring.scaleY = 1f
+                    avatar.scaleX = 1f
+                    avatar.scaleY = 1f
                 } else {
-                    ring.alpha = 1f
-                    // Slow pulse (breathing ring) - faster while actively listening
-                    // than while thinking/speaking, so the state is legible at a
-                    // glance without needing to read anything.
+                    // Gentle breathing pulse, no color/ring - speed is the
+                    // only thing that varies by state now, same "legible
+                    // at a glance" goal as the old ring pulse had.
                     val duration = if (newState == OverlayState.LISTENING) 700L else 1100L
-                    ringAnimator = ValueAnimator.ofFloat(1f, 1.25f).apply {
+                    avatarAnimator = ValueAnimator.ofFloat(1f, 1.08f).apply {
                         this.duration = duration
                         repeatMode = ValueAnimator.REVERSE
                         repeatCount = ValueAnimator.INFINITE
                         addUpdateListener {
                             val scale = it.animatedValue as Float
-                            ring.scaleX = scale
-                            ring.scaleY = scale
-                            ring.alpha = 1f - (scale - 1f) // fades slightly as it expands
+                            avatar.scaleX = scale
+                            avatar.scaleY = scale
                         }
                         start()
                     }
@@ -357,7 +369,7 @@ class KateOverlayService : Service() {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             try {
                 if (isExpanded) toggleExpanded()
-                ringAnimator?.cancel()
+                avatarAnimator?.cancel()
                 if (::overlayView.isInitialized) overlayView.visibility = View.GONE
             } catch (e: Exception) {
                 DebugLog.log(this@KateOverlayService, "KateOverLayService", "hideOverlayBubble failed: ${e.javaClass.simpleName}: ${e.message}")
@@ -399,7 +411,7 @@ class KateOverlayService : Service() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     // ------------------------------------------------------------------
-    // Bubble shell (drag/tap)
+    // Overlay shell setup - non-interactive, no drag/tap (see class doc)
     // ------------------------------------------------------------------
 
     private fun setupOverlayView() {
@@ -418,80 +430,25 @@ class KateOverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         )
         // Bottom-anchored, not top-left - x/y below are offsets from the
-        // bottom-left corner under Gravity.BOTTOM (no START/CENTER), which
-        // is also what the drag-clamp math in setupTouchListeners assumes.
+        // bottom-left corner under Gravity.BOTTOM (no START/CENTER).
+        // No touch listener anymore - the logo is purely a passive
+        // acknowledgment, not an interactive control (see class doc).
+        // Position is fixed, not draggable, since there's no drag
+        // interaction to support anymore.
         params.gravity = Gravity.BOTTOM
-        params.x = ((resources.displayMetrics.widthPixels - dp(104)) / 2).coerceAtLeast(0)
+        params.x = ((resources.displayMetrics.widthPixels - dp(88)) / 2).coerceAtLeast(0)
         params.y = dp(140)
 
-        setupTouchListeners()
         windowManager.addView(overlayView, params)
         overlayAdded = true
 
         overlayView.visibility = View.GONE // hidden until the first wake trigger - see showOverlayBubble
-        overlayView.findViewById<View>(R.id.state_ring).alpha = 0f // starts idle, no pulse
-        overlayView.findViewById<ImageButton>(R.id.overlay_close)?.setOnClickListener {
-            if (isExpanded) toggleExpanded()
-        }
-    }
-
-    private fun setupTouchListeners() {
-        val bubbleView = overlayView.findViewById<FrameLayout>(R.id.overlay_bubble)
-        var initialX = 0
-        var initialY = 0
-        var initialTouchX = 0f
-        var initialTouchY = 0f
-
-        val screenWidth = resources.displayMetrics.widthPixels
-        val bubbleWidthPx = dp(104) // matches state_ring, the widest collapsed element
-        val maxX = (screenWidth - bubbleWidthPx).coerceAtLeast(0)
-        // Bottom-only: the bubble can be nudged up/down a bit for reachability
-        // (e.g. clear of a gesture nav bar) but never dragged away from the
-        // bottom band, and never sideways off past the top - this is what
-        // "shown at the bottom of the screen only" means in practice for a
-        // draggable bubble, versus fully locking position.
-        val minY = dp(60)
-        val maxY = dp(260)
-
-        bubbleView.setOnTouchListener { view, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    val params = overlayView.layoutParams as WindowManager.LayoutParams
-                    initialX = params.x
-                    initialY = params.y
-                    initialTouchX = event.rawX
-                    initialTouchY = event.rawY
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val params = overlayView.layoutParams as WindowManager.LayoutParams
-                    params.x = (initialX + (event.rawX - initialTouchX).toInt()).coerceIn(0, maxX)
-                    // Gravity.BOTTOM measures y upward from the bottom edge,
-                    // so dragging the finger down (positive dy) should
-                    // *decrease* y, not increase it.
-                    params.y = (initialY - (event.rawY - initialTouchY).toInt()).coerceIn(minY, maxY)
-                    windowManager.updateViewLayout(overlayView, params)
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    val dx = event.rawX - initialTouchX
-                    val dy = event.rawY - initialTouchY
-                    if (dx * dx + dy * dy < 100) {
-                        if (state == OverlayState.IDLE) startListenCycle() else toggleExpanded()
-                    }
-                    true
-                }
-                else -> false
-            }
-        }
     }
 
     private fun toggleExpanded() {
         isExpanded = !isExpanded
         val expandedView = overlayView.findViewById<FrameLayout>(R.id.overlay_expanded)
-        val bubbleView = overlayView.findViewById<FrameLayout>(R.id.overlay_bubble)
         expandedView.visibility = if (isExpanded) View.VISIBLE else View.GONE
-        bubbleView.visibility = if (isExpanded) View.GONE else View.VISIBLE
     }
 
     private fun createNotificationChannel() {
@@ -509,7 +466,7 @@ class KateOverlayService : Service() {
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Kate Assistant")
-            .setContentText("Tap the bubble or say a wake phrase")
+            .setContentText("Kate is listening for a wake gesture")
             .setSmallIcon(R.drawable.ic_kate_notification)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
@@ -521,7 +478,7 @@ class KateOverlayService : Service() {
         super.onDestroy()
         activeCycle?.cancel()
         serviceScope.cancel()
-        ringAnimator?.cancel()
+        avatarAnimator?.cancel()
         collapseTimer?.cancel()
         audioCapture.stop()
         MicArbiter.setCapturing(false)

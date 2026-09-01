@@ -43,6 +43,7 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
             when (app) {
                 MessagingApp.WHATSAPP -> sendViaWhatsApp(contactName, message)
                 MessagingApp.MESSENGER -> sendViaMessenger(contactName, message)
+                MessagingApp.TELEGRAM -> sendViaTelegram(contactName, message)
             }
         } catch (e: Exception) {
             Log.e(TAG, "send() failed for ${app.displayName}: ${e.message}")
@@ -123,6 +124,52 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
 
         val sendButton = waitForNodeById("com.facebook.orca:id/send_button")
             ?: return false.also { Log.w(TAG, "Messenger: send button not found") }
+        sendButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        return true
+    }
+
+    // ========================================================================
+    // TELEGRAM
+    // ========================================================================
+    // UNVERIFIED against a live Telegram build as of this change - flagging
+    // clearly rather than pretending confidence I don't have. Telegram's
+    // resource IDs are far more obfuscated/unstable across builds than
+    // WhatsApp/Messenger's stable-ish "id/x" strings, so this leans on
+    // content-description and class-name matching instead, which is more
+    // resilient to that churn but less precise. If sends fail, the first
+    // thing to check is what the actual node tree looks like via Android
+    // Studio's Layout Inspector against the installed Telegram build.
+    private suspend fun sendViaTelegram(contactName: String, message: String): Boolean {
+        if (!openApp(MessagingApp.TELEGRAM.packageName)) return false
+
+        val searchNode = waitForNodeByDescription("Search")
+            ?: return false.also { Log.w(TAG, "Telegram: search icon not found") }
+        searchNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+
+        val searchInput = waitForNodeByClassName("android.widget.EditText")
+            ?: return false.also { Log.w(TAG, "Telegram: search input not found") }
+        if (!setText(searchInput, contactName)) {
+            delay(200)
+            val retryInput = waitForNodeByClassName("android.widget.EditText")
+            if (retryInput == null || !setText(retryInput, contactName)) {
+                return false.also { Log.w(TAG, "Telegram: could not type into search field") }
+            }
+        }
+        delay(600)
+
+        val resultRow = waitForNodeByDescription(contactName)
+            ?: return false.also { Log.w(TAG, "Telegram: no matching contact row found") }
+        clickNearestClickableAncestor(resultRow)
+
+        val composeField = waitForNodeByClassName("android.widget.EditText")
+            ?: return false.also { Log.w(TAG, "Telegram: compose field not found") }
+        if (!setText(composeField, message)) {
+            return false.also { Log.w(TAG, "Telegram: could not type into compose field") }
+        }
+        delay(300)
+
+        val sendButton = waitForNodeByDescription("Send")
+            ?: return false.also { Log.w(TAG, "Telegram: send button not found") }
         sendButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         return true
     }
@@ -211,6 +258,32 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
             val match = root?.let { findNodeByText(it, text) }
             if (match != null) return match
             delay(POLL_INTERVAL_MS)
+        }
+        return null
+    }
+
+    /** Same polling approach, matched by class name - used where no stable
+     * view ID or description is known (Telegram's search/compose fields).
+     * Less precise than the other two matchers (grabs the first node of
+     * that class, so only safe on screens with exactly one match, e.g. a
+     * single EditText on a search or compose screen). */
+    private suspend fun waitForNodeByClassName(className: String): AccessibilityNodeInfo? {
+        val deadline = System.currentTimeMillis() + STEP_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val root = service.rootInActiveWindow
+            val match = root?.let { findNodeByClassName(it, className) }
+            if (match != null) return match
+            delay(POLL_INTERVAL_MS)
+        }
+        return null
+    }
+
+    private fun findNodeByClassName(node: AccessibilityNodeInfo, className: String): AccessibilityNodeInfo? {
+        if (node.className == className) return node
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val match = findNodeByClassName(child, className)
+            if (match != null) return match
         }
         return null
     }

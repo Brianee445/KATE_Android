@@ -53,6 +53,7 @@ class KateCommandProcessor(
     private val wikipediaService: WikipediaService = WikipediaService(),
     private val agentSearchService: AgentSearchService = AgentSearchService(context),
     private val entitlements: com.dti.kate.billing.EntitlementStore = com.dti.kate.billing.EntitlementStore(context),
+    private val repository: com.dti.kate.repository.Repository = com.dti.kate.repository.Repository(context),
 ) {
     interface PermissionBridge {
         fun hasContacts(): Boolean
@@ -155,9 +156,13 @@ class KateCommandProcessor(
                             // point of naming the app at all. Instead we
                             // tell them plainly it didn't work and let them
                             // decide.
-                            val sent = deviceControl.sendViaMessagingApp(action.viaApp, contact.name, body)
-                            if (sent) responseGenerator.speechForMessageViaApp(contact.name, action.viaApp, tone)
-                            else responseGenerator.speechForMessageViaAppFailed(contact.name, action.viaApp, tone)
+                            if (accessibilityNeedsReconnect()) {
+                                responseGenerator.speechForAccessibilityReconnectNeeded(tone)
+                            } else {
+                                val sent = deviceControl.sendViaMessagingApp(action.viaApp, contact.name, body)
+                                if (sent) responseGenerator.speechForMessageViaApp(contact.name, action.viaApp, tone)
+                                else responseGenerator.speechForMessageViaAppFailed(contact.name, action.viaApp, tone)
+                            }
                         } else {
                             deviceControl.sendSms(contact.phoneNumber, body)
                             responseGenerator.speechForMessage(contact.name, tone)
@@ -255,8 +260,18 @@ class KateCommandProcessor(
                     else responseGenerator.speechForJokeFailed(tone)
                 }
             }
-            is KateAction.SmallTalk ->
-                responseGenerator.speechForSmallTalk(action.kind, tone, settings.getUserName())
+            is KateAction.SmallTalk -> {
+                // Canned local response first as the instant fallback -
+                // greetings need to feel snappy, not slower than before
+                // this existed. A short timeout means the LLM only wins
+                // when it's genuinely fast; otherwise the local reply
+                // ships and the user never perceives a delay.
+                val fallback = responseGenerator.speechForSmallTalk(action.kind, tone, settings.getUserName())
+                val llmReply = kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                    repository.chat(query).getOrNull()?.response
+                }
+                llmReply?.takeIf { it.isNotBlank() } ?: fallback
+            }
 
             // ---- Batch 3 additions ----
             KateAction.GoHome ->

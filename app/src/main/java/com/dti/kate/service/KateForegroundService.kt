@@ -46,7 +46,12 @@ class KateForegroundService : Service() {
         private const val NOTIFICATION_ID = 2001
 
         // Shake detection
-        private const val SHAKE_THRESHOLD = 15f
+        // Threshold is empirical, not derived from any spec - if this
+        // still doesn't feel right, walking/handling noise on most
+        // devices sits in the 2-8 range on this metric, so there's room
+        // to lower further (e.g. to 10f) before false-triggering becomes
+        // a real risk.
+        private const val SHAKE_THRESHOLD = 12f
         private const val SHAKE_COOLDOWN_MS = 2000L
 
         // Raise detection (simple heuristic - not perfect, but a reasonable

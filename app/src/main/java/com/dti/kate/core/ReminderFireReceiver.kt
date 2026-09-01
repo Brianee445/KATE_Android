@@ -29,7 +29,7 @@ class ReminderFireReceiver : BroadcastReceiver() {
     companion object {
         const val EXTRA_REMINDER_ID = "reminder_id"
         const val EXTRA_REMINDER_TEXT = "reminder_text"
-        private const val CHANNEL_ID = "kate_reminders_channel"
+        private const val CHANNEL_ID = "kate_reminders_channel_v2"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -61,6 +61,23 @@ class ReminderFireReceiver : BroadcastReceiver() {
             CHANNEL_ID, "Reminders", NotificationManager.IMPORTANCE_HIGH,
         ).apply {
             description = "Reminders you've asked Kate to set"
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
+            // Explicit rather than relying on the channel's implicit
+            // default sound - that was silent in testing on this device.
+            // TYPE_ALARM (not TYPE_NOTIFICATION) + USAGE_ALARM plays
+            // louder and is more attention-grabbing, appropriate for
+            // something the user specifically asked to be reminded of at
+            // an exact time, closer to how a real alarm behaves.
+            val alarmSound = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
+                ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+            setSound(
+                alarmSound,
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
@@ -78,8 +95,9 @@ class ReminderFireReceiver : BroadcastReceiver() {
             .setContentTitle("Reminder")
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_kate_notification)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVibrate(longArrayOf(0, 500, 250, 500, 250, 500))
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)
             .build()

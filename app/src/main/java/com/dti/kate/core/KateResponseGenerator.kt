@@ -62,6 +62,7 @@ enum class SmallTalkKind { GREETING, HOW_ARE_YOU, THANKS, GOODBYE, COMPLIMENT }
 enum class MessagingApp(val packageName: String, val displayName: String) {
     WHATSAPP("com.whatsapp", "WhatsApp"),
     MESSENGER("com.facebook.orca", "Messenger"),
+    TELEGRAM("org.telegram.messenger", "Telegram"),
 }
 
 data class KateReply(val action: KateAction, val speech: String)
@@ -297,7 +298,14 @@ class KateResponseGenerator {
                 lower.startsWith("look up ") || lower.startsWith("google ") ||
                 lower.startsWith("who ") || lower.startsWith("what ") ||
                 lower.startsWith("when ") || lower.startsWith("where ") ||
-                lower.startsWith("how ") -> {
+                lower.startsWith("how ") || lower.startsWith("why ") ||
+                lower.startsWith("define ") || lower.startsWith("explain ") ||
+                lower.startsWith("is ") || lower.startsWith("are ") ||
+                lower.startsWith("was ") || lower.startsWith("were ") ||
+                lower.startsWith("does ") || lower.startsWith("do ") ||
+                lower.startsWith("did ") || lower.startsWith("can ") ||
+                lower.startsWith("solve ") || lower.startsWith("breakdown ") ||
+                lower.startsWith("break down ") -> {
                 val wantsBrowser = lower.contains("open") && (lower.contains("browser") || lower.contains("google"))
                 val query = extractAfterTrigger(
                     lower, listOf("search ", "find ", "look up ", "google ")

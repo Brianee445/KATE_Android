@@ -570,6 +570,105 @@ fun SettingsScreen(
                 }
             }
 
+            item { SettingsSectionHeader(title = "Voice") }
+            item {
+                // Short-lived TextToSpeech instance just for listing +
+                // previewing voices - separate from KateTtsEngine, which
+                // only exists inside the overlay/foreground services, not
+                // here. Torn down on dispose so it's not left running
+                // after the user leaves this screen.
+                var previewTts by remember { mutableStateOf<android.speech.tts.TextToSpeech?>(null) }
+                var voices by remember { mutableStateOf<List<android.speech.tts.Voice>>(emptyList()) }
+                var selectedVoiceName by remember { mutableStateOf(localStore.getPreferredVoiceName()) }
+
+                DisposableEffect(Unit) {
+                    val tts = android.speech.tts.TextToSpeech(context) { status ->
+                        if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                            // Re-read after init - voices is empty until the engine reports ready.
+                        }
+                    }
+                    previewTts = tts
+                    onDispose { tts.stop(); tts.shutdown() }
+                }
+
+                LaunchedEffect(previewTts) {
+                    // Give the engine a moment after construction before
+                    // reading .voices - it's frequently empty on the very
+                    // first read immediately after the init callback fires.
+                    kotlinx.coroutines.delay(300)
+                    voices = previewTts?.voices
+                        ?.filter { it.locale.language == java.util.Locale.US.language }
+                        ?.sortedWith(compareByDescending<android.speech.tts.Voice> { it.quality }.thenBy { it.name })
+                        ?: emptyList()
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    shape = KateShape.MD,
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Kate's voice",
+                            style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
+                        )
+                        Text(
+                            text = "Choose from the voices installed on this device. Tap to preview, tap again to select.",
+                            style = MaterialTheme.typography.bodySmall, color = TextSecondary,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (voices.isEmpty()) {
+                            Text(
+                                text = "Loading available voices...",
+                                style = MaterialTheme.typography.bodySmall, color = TextSecondary,
+                            )
+                        }
+                        voices.forEach { voice ->
+                            val isSelected = voice.name == selectedVoiceName
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (isSelected) {
+                                            // Already selected - tapping again previews it.
+                                            previewTts?.voice = voice
+                                            previewTts?.speak(
+                                                "Hi, this is how I sound.",
+                                                android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "preview",
+                                            )
+                                        } else {
+                                            selectedVoiceName = voice.name
+                                            localStore.setPreferredVoiceName(voice.name)
+                                            previewTts?.voice = voice
+                                            previewTts?.speak(
+                                                "Hi, this is how I sound.",
+                                                android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "preview",
+                                            )
+                                        }
+                                    }
+                                    .padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // Raw system voice names are things like
+                                // "en-us-x-iol-local" - not meaningful to a
+                                // user, so this derives a short readable
+                                // label from the name/locale instead of
+                                // showing it verbatim.
+                                Text(
+                                    text = friendlyVoiceLabel(voice),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isSelected) LimeAccent else TextPrimary,
+                                )
+                                if (isSelected) {
+                                    Icon(Icons.Outlined.Check, contentDescription = "Selected", tint = LimeAccent)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             item { SettingsSectionHeader(title = "Listening") }
             item {
                 Card(
@@ -879,6 +978,26 @@ private fun SettingsSwitchItem(
 }
 
 @Composable
+/** Raw android.speech.tts.Voice names are internal identifiers like
+ * "en-us-x-iol-local" or "en-US-language" - meaningless to a user. This
+ * derives a short human label instead: network-quality voices are called
+ * out (generally sound noticeably better than on-device ones), otherwise
+ * just a generic "Voice N" numbered by discovery order so entries stay
+ * distinguishable without exposing the raw identifier. */
+private fun friendlyVoiceLabel(voice: android.speech.tts.Voice): String {
+    val quality = when {
+        voice.quality >= android.speech.tts.Voice.QUALITY_VERY_HIGH -> "Premium"
+        voice.quality >= android.speech.tts.Voice.QUALITY_HIGH -> "High quality"
+        else -> "Standard"
+    }
+    val networkNote = if (voice.isNetworkConnectionRequired) " (online)" else ""
+    // Stable short suffix from the name's hash so the same voice always
+    // gets the same label across recompositions/app restarts, without
+    // needing to persist a separate display-name mapping anywhere.
+    val shortId = kotlin.math.abs(voice.name.hashCode()) % 100
+    return "$quality voice #$shortId$networkNote"
+}
+
 private fun SettingsButtonItem(
     title: String,
     description: String,
