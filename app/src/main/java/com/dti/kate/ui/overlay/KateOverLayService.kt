@@ -130,12 +130,16 @@ class KateOverlayService : Service() {
                 override fun hasLocation() = ContextCompat.checkSelfPermission(
                     this@KateOverlayService, android.Manifest.permission.ACCESS_COARSE_LOCATION
                 ) == PackageManager.PERMISSION_GRANTED
+                override fun hasCallPhone() = ContextCompat.checkSelfPermission(
+                    this@KateOverlayService, android.Manifest.permission.CALL_PHONE
+                ) == PackageManager.PERMISSION_GRANTED
                 // Neither a permission-dialog launcher nor accompanist's
                 // rememberPermissionState exist outside an Activity -
                 // opening the app is the one legitimate exception to
                 // "never opens the app for this".
                 override fun requestContacts() = openAppForPermission()
                 override fun requestLocation() = openAppForPermission()
+                override fun requestCallPhone() = openAppForPermission()
             },
         )
 
@@ -388,24 +392,30 @@ class KateOverlayService : Service() {
      * scrolling once text would push it past a comfortable size.
      */
     private fun showResultText(text: String) {
-        val expandedView = overlayView.findViewById<FrameLayout>(R.id.overlay_expanded)
-        val transcriptLabel = expandedView.findViewById<android.widget.TextView>(R.id.overlay_transcript)
-        val scrollView = expandedView.findViewById<android.widget.ScrollView>(R.id.overlay_transcript_scroll)
-        transcriptLabel?.text = text
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                val expandedView = overlayView.findViewById<FrameLayout>(R.id.overlay_expanded)
+                val transcriptLabel = expandedView.findViewById<android.widget.TextView>(R.id.overlay_transcript)
+                val scrollView = expandedView.findViewById<android.widget.ScrollView>(R.id.overlay_transcript_scroll)
+                transcriptLabel?.text = text
 
-        scrollView?.let { sv ->
-            sv.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
-            sv.requestLayout()
-            sv.post {
-                val maxHeightPx = dp(280)
-                if (sv.height > maxHeightPx) {
-                    sv.layoutParams.height = maxHeightPx
+                scrollView?.let { sv ->
+                    sv.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
                     sv.requestLayout()
+                    sv.post {
+                        val maxHeightPx = dp(280)
+                        if (sv.height > maxHeightPx) {
+                            sv.layoutParams.height = maxHeightPx
+                            sv.requestLayout()
+                        }
+                    }
                 }
+
+                if (!isExpanded) toggleExpanded()
+            } catch (e: Exception) {
+                DebugLog.log(this@KateOverlayService, "KateOverLayService", "showResultText failed: ${e.javaClass.simpleName}: ${e.message}")
             }
         }
-
-        if (!isExpanded) toggleExpanded()
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -445,10 +455,28 @@ class KateOverlayService : Service() {
         overlayView.visibility = View.GONE // hidden until the first wake trigger - see showOverlayBubble
     }
 
+    /**
+     * Made self-safe (posts to main internally) for defense-in-depth,
+     * same reasoning as setState() - most call sites already wrap this in
+     * their own Handler.post, but showResultText()'s didn't (that was the
+     * actual crash - confirmed via bugreport: CalledFromWrongThreadException
+     * at toggleExpanded <- showResultText <- startListenCycle, thrown from
+     * a DefaultDispatcher-worker thread, specifically on search/calculate
+     * results since those are the command types that show text at all).
+     * A caller that's already on main (or already inside another post
+     * block) still works fine - Handler.post from the main thread just
+     * enqueues immediately.
+     */
     private fun toggleExpanded() {
-        isExpanded = !isExpanded
-        val expandedView = overlayView.findViewById<FrameLayout>(R.id.overlay_expanded)
-        expandedView.visibility = if (isExpanded) View.VISIBLE else View.GONE
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                isExpanded = !isExpanded
+                val expandedView = overlayView.findViewById<FrameLayout>(R.id.overlay_expanded)
+                expandedView.visibility = if (isExpanded) View.VISIBLE else View.GONE
+            } catch (e: Exception) {
+                DebugLog.log(this@KateOverlayService, "KateOverLayService", "toggleExpanded failed: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
     }
 
     private fun createNotificationChannel() {

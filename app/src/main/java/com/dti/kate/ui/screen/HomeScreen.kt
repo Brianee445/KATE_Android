@@ -51,6 +51,7 @@ fun HomeScreen(
     val micPermission = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
     val locationPermission = rememberPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION)
     val contactsPermission = rememberPermissionState(android.Manifest.permission.READ_CONTACTS)
+    val callPhonePermission = rememberPermissionState(android.Manifest.permission.CALL_PHONE)
     val contactsHelper = remember { ContactsHelper(context) }
 
     val localSettings = remember { LocalSettingsStore(context) }
@@ -211,8 +212,10 @@ fun HomeScreen(
             permissionBridge = object : KateCommandProcessor.PermissionBridge {
                 override fun hasContacts() = contactsPermission.status.isGranted
                 override fun hasLocation() = locationPermission.status.isGranted
+                override fun hasCallPhone() = callPhonePermission.status.isGranted
                 override fun requestContacts() = contactsPermission.launchPermissionRequest()
                 override fun requestLocation() = locationPermission.launchPermissionRequest()
+                override fun requestCallPhone() = callPhonePermission.launchPermissionRequest()
             },
         )
     }

@@ -435,6 +435,20 @@ class KateResponseGenerator {
         KateTone.SASSY -> listOf("Calling $contactName. Try to be nice.", "Dialing $contactName - don't overthink it.")
     })
 
+    /**
+     * Used when CALL_PHONE isn't granted, so DeviceControlManager.makeCall
+     * falls back to ACTION_DIAL (opens the dialer pre-filled, requires a
+     * manual tap to actually place the call) rather than ACTION_CALL
+     * (dials immediately). Previously speechForCall's "Calling X now" was
+     * used for both cases, which was actively misleading when nothing had
+     * actually been dialed yet.
+     */
+    fun speechForCallNeedsConfirm(contactName: String, tone: KateTone): String = pick("call_needs_confirm.$tone", when (tone) {
+        KateTone.PROFESSIONAL -> listOf("I've opened the dialer with $contactName's number - tap call to connect.")
+        KateTone.BALANCED -> listOf("Dialer's open with $contactName's number - just tap call.")
+        KateTone.SASSY -> listOf("Dialer's up with $contactName's number. One tap left - I can't do everything for you.")
+    })
+
     fun speechForMessage(contactName: String, tone: KateTone): String = pick("message.$tone", when (tone) {
         KateTone.PROFESSIONAL -> listOf("Sending your message to $contactName.", "Message sent to $contactName.")
         KateTone.BALANCED -> listOf("Sending that to $contactName.", "Message sent to $contactName.")

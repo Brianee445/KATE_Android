@@ -56,20 +56,33 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
     // ========================================================================
     // Flow: open app -> tap search icon -> type contact name -> tap first
     // result -> type message into compose field -> tap send button.
+    //
+    // WhatsApp Business (com.whatsapp.w4b) is a separate APK from regular
+    // WhatsApp (com.whatsapp) - previously this always launched regular
+    // WhatsApp regardless of which one the user actually has/uses, since
+    // the package name was hardcoded. resolveWhatsAppPackage() now prefers
+    // Business if it's installed. The view-ID lookups below are also built
+    // from that resolved package rather than a hardcoded "com.whatsapp:id/"
+    // prefix - Business is built from largely the same codebase, so the
+    // view ID *names* (menuitem_search, entry, send, etc.) are expected to
+    // match, but the ID's package prefix is tied to whichever APK actually
+    // compiled it, which differs between the two variants.
     private suspend fun sendViaWhatsApp(contactName: String, message: String): Boolean {
-        if (!openApp(MessagingApp.WHATSAPP.packageName)) return false
+        val pkg = resolveWhatsAppPackage()
+            ?: return false.also { Log.w(TAG, "WhatsApp: neither regular nor Business is installed") }
+        if (!openApp(pkg)) return false
 
         // WhatsApp's main screen search icon.
-        val searchNode = waitForNodeById("com.whatsapp:id/menuitem_search")
+        val searchNode = waitForNodeById("$pkg:id/menuitem_search")
             ?: waitForNodeByDescription("Search")
             ?: return false.also { Log.w(TAG, "WhatsApp: search icon not found") }
         searchNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
 
-        val searchInput = waitForNodeById("com.whatsapp:id/search_src_text")
+        val searchInput = waitForNodeById("$pkg:id/search_src_text")
             ?: return false.also { Log.w(TAG, "WhatsApp: search input not found") }
         if (!setText(searchInput, contactName)) {
             delay(200)
-            val retryInput = waitForNodeById("com.whatsapp:id/search_src_text")
+            val retryInput = waitForNodeById("$pkg:id/search_src_text")
             if (retryInput == null || !setText(retryInput, contactName)) {
                 return false.also { Log.w(TAG, "WhatsApp: could not type into search field") }
             }
@@ -77,21 +90,37 @@ class MessagingAppAutomator(private val service: KateAccessibilityService) {
         delay(600) // let the results list actually filter before reading it
 
         // First result row in the filtered contact/chat list.
-        val resultRow = waitForNodeById("com.whatsapp:id/contactpicker_row_name")
+        val resultRow = waitForNodeById("$pkg:id/contactpicker_row_name")
             ?: return false.also { Log.w(TAG, "WhatsApp: no matching contact row found") }
         clickNearestClickableAncestor(resultRow)
 
-        val composeField = waitForNodeById("com.whatsapp:id/entry")
+        val composeField = waitForNodeById("$pkg:id/entry")
             ?: return false.also { Log.w(TAG, "WhatsApp: compose field not found") }
         if (!setText(composeField, message)) {
             return false.also { Log.w(TAG, "WhatsApp: could not type into compose field") }
         }
         delay(300)
 
-        val sendButton = waitForNodeById("com.whatsapp:id/send")
+        val sendButton = waitForNodeById("$pkg:id/send")
             ?: return false.also { Log.w(TAG, "WhatsApp: send button not found") }
         sendButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         return true
+    }
+
+    /**
+     * Prefers WhatsApp Business if installed, falls back to regular
+     * WhatsApp, returns null if neither is present. Checked via
+     * getLaunchIntentForPackage rather than getPackageInfo since that's
+     * already the exact check openApp() itself relies on to launch it -
+     * consistent with what "installed and launchable" actually means here.
+     */
+    private fun resolveWhatsAppPackage(): String? {
+        val pm = service.packageManager
+        return when {
+            pm.getLaunchIntentForPackage("com.whatsapp.w4b") != null -> "com.whatsapp.w4b"
+            pm.getLaunchIntentForPackage("com.whatsapp") != null -> "com.whatsapp"
+            else -> null
+        }
     }
 
     // ========================================================================

@@ -58,9 +58,11 @@ class KateCommandProcessor(
     interface PermissionBridge {
         fun hasContacts(): Boolean
         fun hasLocation(): Boolean
+        fun hasCallPhone(): Boolean
         /** Called when a permission is missing. Implementations should either launch a request (if they have an Activity) or open the app to the right screen (if they don't) - either way, returns immediately; the current command just fails gracefully this time around. */
         fun requestContacts()
         fun requestLocation()
+        fun requestCallPhone()
     }
 
     data class Result(val action: KateAction, val speech: String)
@@ -129,8 +131,28 @@ class KateCommandProcessor(
                 } else {
                     val contact = resolveContactFastPath(action.spokenName)
                     if (contact != null) {
+                        val canDialDirectly = permissionBridge.hasCallPhone()
+                        if (!canDialDirectly) {
+                            // Doesn't block this attempt on the async
+                            // permission result (same reasoning as
+                            // Contacts elsewhere in this function - no
+                            // await/retry, the current command just
+                            // proceeds with today's best available
+                            // behavior). Unlike Contacts, calling still
+                            // degrades gracefully without this permission
+                            // (DeviceControlManager.makeCall falls back to
+                            // ACTION_DIAL), so there's no reason to block
+                            // the call attempt itself - just request it
+                            // for next time and be honest about what
+                            // actually happened just now.
+                            permissionBridge.requestCallPhone()
+                        }
                         deviceControl.makeCall(contact.phoneNumber)
-                        responseGenerator.speechForCall(contact.name, tone)
+                        if (canDialDirectly) {
+                            responseGenerator.speechForCall(contact.name, tone)
+                        } else {
+                            responseGenerator.speechForCallNeedsConfirm(contact.name, tone)
+                        }
                     } else {
                         responseGenerator.speechForContactNotFound(action.spokenName, tone)
                     }

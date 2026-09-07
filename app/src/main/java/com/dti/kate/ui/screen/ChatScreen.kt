@@ -54,6 +54,7 @@ fun ChatScreen(navController: NavController) {
 
     val locationPermission = rememberPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION)
     val contactsPermission = rememberPermissionState(android.Manifest.permission.READ_CONTACTS)
+    val callPhonePermission = rememberPermissionState(android.Manifest.permission.CALL_PHONE)
 
     val settings = remember { LocalSettingsStore(context) }
     val responseGenerator = remember { KateResponseGenerator() }
@@ -71,8 +72,10 @@ fun ChatScreen(navController: NavController) {
             permissionBridge = object : KateCommandProcessor.PermissionBridge {
                 override fun hasContacts() = contactsPermission.status.isGranted
                 override fun hasLocation() = locationPermission.status.isGranted
+                override fun hasCallPhone() = callPhonePermission.status.isGranted
                 override fun requestContacts() = contactsPermission.launchPermissionRequest()
                 override fun requestLocation() = locationPermission.launchPermissionRequest()
+                override fun requestCallPhone() = callPhonePermission.launchPermissionRequest()
             },
         )
     }
