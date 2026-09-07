@@ -19,7 +19,7 @@ repo root).
      but not verified against a real Business install. Worth confirming
      this actually completes a send end-to-end, not just that it opens
      the right app.
-
+   
 2. app/src/main/java/com/dti/kate/ui/overlay/KateOverLayService.kt
    - Root cause of "overlay crashes on search/calculate" and "response
      gets cut off": showResultText() (which displays search/calculation
