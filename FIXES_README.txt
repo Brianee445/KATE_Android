@@ -9,7 +9,7 @@ fixes (the call permission prompt, WhatsApp Business resolution) should
 produce visibly different behavior. If nothing changes at all after
 testing, the most likely explanation is a stale/cached build rather than
 a new bug - worth ruling that out before chasing anything further.
-
+  
 ===========================================================================
 1. app/src/main/java/com/dti/kate/service/MessagingAppAutomator.kt
 ===========================================================================
