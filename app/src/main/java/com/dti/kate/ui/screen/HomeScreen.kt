@@ -52,6 +52,7 @@ fun HomeScreen(
     val locationPermission = rememberPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION)
     val contactsPermission = rememberPermissionState(android.Manifest.permission.READ_CONTACTS)
     val callPhonePermission = rememberPermissionState(android.Manifest.permission.CALL_PHONE)
+    val phoneStatePermission = rememberPermissionState(android.Manifest.permission.READ_PHONE_STATE)
     val contactsHelper = remember { ContactsHelper(context) }
 
     val localSettings = remember { LocalSettingsStore(context) }
@@ -337,6 +338,21 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         KateWakeSignal.events.collect { token ->
             pendingWakeToken = token
+        }
+    }
+
+    // READ_PHONE_STATE has no natural "user just tried to use this"
+    // moment the way mic/contacts/call do - incoming-call announcement is
+    // a passive background feature nobody explicitly triggers, so it was
+    // fully built (KateForegroundService's phoneStateReceiver, contact
+    // lookup, TTS announcement - all real, tested logic) but could never
+    // actually fire for anyone, since the permission was declared in the
+    // manifest but never once requested at runtime. Requesting it here,
+    // once, on first HomeScreen composition (same "ask early" pattern
+    // apps commonly use for passive/background permissions).
+    LaunchedEffect(Unit) {
+        if (!phoneStatePermission.status.isGranted) {
+            phoneStatePermission.launchPermissionRequest()
         }
     }
 

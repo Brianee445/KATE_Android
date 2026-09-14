@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,6 +43,15 @@ data class WakeTrigger(
     val label: String,
     val description: String,
     val enabled: Boolean,
+    /**
+     * Whether this trigger's underlying hardware/asset is actually
+     * present on this device. Raise and shake both depend on
+     * TYPE_ACCELEROMETER - nearly universal, but not guaranteed on every
+     * device, and previously the toggle just silently did nothing if it
+     * was missing rather than explaining why. Wake word depends on the
+     * trained model asset being bundled, not a sensor.
+     */
+    val supported: Boolean = true,
 )
 
 data class SettingsState(
@@ -64,6 +74,11 @@ class SettingsViewModel(private val context: Context) {
     private val repository = Repository(context.applicationContext)
     private val localStore = LocalSettingsStore(context)
 
+    private val hasAccelerometer: Boolean by lazy {
+        val sensorManager = context.applicationContext.getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager
+        sensorManager?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) != null
+    }
+
     private val _settings = mutableStateOf(
         SettingsState(
             toneLevel = localStore.getToneLevel(),
@@ -71,8 +86,8 @@ class SettingsViewModel(private val context: Context) {
             offlineMode = localStore.getOfflineMode(),
             sttMode = localStore.getSttMode(),
             wakeTriggers = listOf(
-                WakeTrigger("raise", "Raise to Wake", "Raise your phone to activate Kate", localStore.getRaiseToWakeEnabled()),
-                WakeTrigger("shake", "Shake", "Shake your phone to activate Kate", localStore.getShakeEnabled()),
+                WakeTrigger("raise", "Raise to Wake", "Raise your phone to activate Kate", localStore.getRaiseToWakeEnabled(), supported = hasAccelerometer),
+                WakeTrigger("shake", "Shake", "Shake your phone to activate Kate", localStore.getShakeEnabled(), supported = hasAccelerometer),
                 WakeTrigger("wakeword", "\"Hey Kate\"", "Say the wake word to activate Kate", localStore.getWakeWordEnabled()),
             ),
         )
@@ -132,6 +147,9 @@ class SettingsViewModel(private val context: Context) {
     }
 
     fun toggleWakeTrigger(id: String) {
+        val current = settings.value.wakeTriggers.firstOrNull { it.id == id } ?: return
+        if (!current.supported) return // no hardware for this on this device - ignore the tap rather than toggling a no-op setting
+
         val newTriggers = settings.value.wakeTriggers.map {
             if (it.id == id) it.copy(enabled = !it.enabled) else it
         }
@@ -270,6 +288,33 @@ fun SettingsScreen(
     val toneUnlocked = entitlements.isUnlocked(com.dti.kate.billing.GatedFeature.TONE_SLIDER)
     val wakeWordUnlocked = entitlements.isUnlocked(com.dti.kate.billing.GatedFeature.WAKE_WORD)
     val coroutineScope = rememberCoroutineScope()
+
+    // RoleManager.ROLE_ASSISTANT is API 29+; below that, Android's own
+    // older Default Apps > Assist picker discovers apps by their
+    // ACTION_ASSIST manifest declaration alone, with no code-side role
+    // request needed - so this whole block is a no-op (not a crash risk)
+    // pre-29, it just leaves isAssistantRoleAvailable false.
+    var isAssistantRoleAvailable by remember { mutableStateOf(false) }
+    var isAssistantRoleHeld by remember { mutableStateOf(false) }
+    val roleManager = remember {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            context.getSystemService(android.app.role.RoleManager::class.java)
+        } else null
+    }
+    LaunchedEffect(Unit) {
+        if (roleManager != null) {
+            isAssistantRoleAvailable = roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)
+            isAssistantRoleHeld = roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT)
+        }
+    }
+    val assistantRoleLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) {
+        // Re-check actual platform state rather than trusting the result
+        // code - the system picker can be dismissed/backed out of in ways
+        // that don't map cleanly to RESULT_OK/RESULT_CANCELED.
+        isAssistantRoleHeld = roleManager?.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT) ?: false
+    }
 
     var showClearConfirm by remember { mutableStateOf(false) }
     var showAdminPasscodeDialog by remember { mutableStateOf(false) }
@@ -494,15 +539,61 @@ fun SettingsScreen(
                 // upgrade to it, rather than wondering where it went.
                 val isWakeWordRow = trigger.id == "wakeword"
                 val locked = isWakeWordRow && !wakeWordUnlocked
+                // Raise/shake both need TYPE_ACCELEROMETER - nearly
+                // universal but not guaranteed. Previously this toggle
+                // just silently did nothing on a device without it;
+                // now it's shown disabled with an explanation instead.
+                val unsupported = !trigger.supported
                 SettingsSwitchItem(
                     title = trigger.label,
-                    description = if (locked) "Premium feature - tap to upgrade" else trigger.description,
-                    checked = trigger.enabled && !locked,
+                    description = when {
+                        unsupported -> "Not supported on this device"
+                        locked -> "Premium feature - tap to upgrade"
+                        else -> trigger.description
+                    },
+                    checked = trigger.enabled && !locked && !unsupported,
                     onCheckedChange = {
-                        if (locked) navController.navigate("premium")
-                        else viewModel.toggleWakeTrigger(trigger.id)
+                        when {
+                            unsupported -> { /* no-op - no hardware for this here */ }
+                            locked -> navController.navigate("premium")
+                            else -> viewModel.toggleWakeTrigger(trigger.id)
+                        }
                     },
                 )
+            }
+
+            if (isAssistantRoleAvailable) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            if (roleManager != null && !isAssistantRoleHeld) {
+                                assistantRoleLauncher.launch(
+                                    roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_ASSISTANT)
+                                )
+                            }
+                        },
+                        colors = CardDefaults.cardColors(containerColor = Surface),
+                        shape = KateShape.MD,
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = if (isAssistantRoleHeld) "Kate is your Digital Assistant" else "Set Kate as your Digital Assistant",
+                                style = MaterialTheme.typography.bodyMedium, color = TextPrimary, fontWeight = FontWeight.Bold,
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (isAssistantRoleHeld) {
+                                    "Long-press home (or your device's assist gesture) opens Kate directly."
+                                } else {
+                                    "Tap to make Kate available from your phone's own assist gesture " +
+                                        "(long-press home, corner-swipe, or whatever your device uses) - " +
+                                        "not just shake, raise, or the overlay bubble."
+                                },
+                                style = MaterialTheme.typography.labelSmall, color = LimeAccent,
+                            )
+                        }
+                    }
+                }
             }
 
             if (viewModel.isTranssionDevice()) {

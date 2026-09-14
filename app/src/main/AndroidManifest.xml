@@ -93,6 +93,23 @@
             </intent-filter>
         </activity>
 
+        <!-- Assist trampoline - ACTION_ASSIST qualifies Kate for Android's
+             ROLE_ASSISTANT (the "Digital assistant app" picker in system
+             settings). exported=true is required for the system to be able
+             to launch this on the assist gesture; NoDisplay theme + no
+             other intent-filter keeps it invisible and unreachable any
+             other way (see KateAssistActivity's own doc comment). -->
+        <activity
+            android:name=".ui.KateAssistActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <!-- Foreground Service -->
         <service
             android:name=".service.KateForegroundService"
